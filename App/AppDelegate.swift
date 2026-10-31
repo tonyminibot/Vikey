@@ -34,6 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let ws = NSWorkspace.shared.notificationCenter
         ws.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { _ in
             VikeyCore.frontmostAppChanged()
+            AppState.shared.frontAppChanged()
         }
         ws.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main) { _ in
             VikeyCore.activeSpaceChanged()

@@ -18,6 +18,7 @@ struct MainView: View {
     @AppStorage(PrefEmoji.hotkey) private var emojiKey = 0
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
     @State private var browserDenied = false
+    @State private var excluded = ExcludedApps.all
     @ObservedObject private var updater = Updater.shared
 
     var body: some View {
@@ -95,6 +96,38 @@ struct MainView: View {
                     }
                 }
                 Section {
+                    fold("excluded", "Ứng dụng loại trừ", excludedSummary)
+                    if isOpen("excluded") {
+                    Text("Trong các ứng dụng này Vikey không gõ tiếng Việt và không tự chuyển (hợp với phần mềm điều khiển máy từ xa). Phím chuyển Anh/Việt vẫn dùng được.")
+                        .font(.callout).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    ForEach(excluded, id: \.self) { id in
+                        let info = ExcludedApps.info(id)
+                        HStack(spacing: 8) {
+                            if let icon = info.icon { Image(nsImage: icon).resizable().frame(width: 18, height: 18) }
+                            else { Image(systemName: "app").frame(width: 18, height: 18).foregroundStyle(.secondary) }
+                            Text(info.name)
+                            Spacer()
+                            Button { ExcludedApps.remove(id); excluded = ExcludedApps.all } label: { Image(systemName: "minus.circle") }
+                                .buttonStyle(.plain).foregroundStyle(.secondary)
+                                .accessibilityLabel("Bỏ \(info.name)")
+                                .help(id)
+                        }
+                    }
+                    HStack {
+                        Menu("Thêm ứng dụng đang mở") {
+                            ForEach(ExcludedApps.runningApps().filter { !excluded.contains($0.id) }, id: \.id) { app in
+                                Button(app.name) { ExcludedApps.add(app.id); excluded = ExcludedApps.all }
+                            }
+                        }
+                        .fixedSize()
+                        Button("Chọn ứng dụng…") { ExcludedApps.pickAndAdd(); excluded = ExcludedApps.all }
+                        Spacer()
+                        Button("Mặc định") { ExcludedApps.resetToDefaults(); excluded = ExcludedApps.all }
+                    }
+                    }
+                }
+                Section {
                     fold("general", "Chung", generalSummary)
                     if isOpen("general") {
                     Toggle(isOn: Binding(get: { launchAtLogin }, set: { LaunchAtLogin.set($0); launchAtLogin = LaunchAtLogin.isEnabled })) {
@@ -165,6 +198,9 @@ struct MainView: View {
         if spelling != 0 { parts.append("chính tả") }
         if teencode != 0 { parts.append("teencode") }
         return parts.joined(separator: " · ")
+    }
+    private var excludedSummary: String {
+        excluded.isEmpty ? "Không có" : "\(excluded.count) ứng dụng"
     }
     private var emojiSummary: String {
         guard emojiOn != 0 else { return "Tắt" }

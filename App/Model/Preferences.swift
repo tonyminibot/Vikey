@@ -17,6 +17,7 @@ enum PrefKey {
     static let typingLogEnabled = "TypingLogEnabled"
     static let hotkey = "SwitchKeyStatus"
     static let teencode = "Teencode"
+    static let excludedApps = "ExcludedApps"   // bundle ids Vikey stays out of (array of String)
     static let openSections = "MainWindowOpenSections"   // which cards of the main window are open
 }
 
@@ -29,6 +30,7 @@ enum Preferences {
             PrefKey.smartSwitch: 1, PrefKey.smartSwitchPerSite: false, PrefKey.autoSwitch: 1, PrefKey.pauseAfterManual: 1,
             PrefKey.typingLogKeys: 1, PrefKey.typingLogEnabled: 0, PrefKey.hotkey: Hotkey.defaultValue,
             PrefKey.teencode: 1, PrefKey.openSections: "auto",
+            PrefKey.excludedApps: ExcludedApps.defaults,
         ])
     }
 

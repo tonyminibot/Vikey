@@ -10,6 +10,9 @@ final class AppState: ObservableObject {
     @Published private(set) var language: Int = Int(VikeyCore.language())
     @Published private(set) var isRunning = false
     @Published var needsOnboarding = false
+    /// Bumped when the app in front changes, so the menu bar re-reads the per-app auto switch toggle.
+    @Published private(set) var frontAppTick = 0
+    func frontAppChanged() { frontAppTick &+= 1 }
 
     private var permissionTimer: Timer?
 

@@ -291,6 +291,37 @@ extern "C" {
     }
 
     /// Reads Vikey's settings into the engine. Called at start and whenever a setting changes.
+    // ---- Excluded apps -------------------------------------------------------------------
+    // "ExcludedApps" (UserDefaults, array of bundle ids; edited in the main window, remote-control apps listed by
+    // default): while one of them is in front Vikey passes every key through untouched, so no Vietnamese typing and
+    // no auto switch (typing there goes to another machine). The language hotkey still works.
+    static NSSet<NSString*>* _excludedApps = nil;
+    static bool _frontExcluded = false;
+
+    void queryFrontMostApp(void);
+
+    static void UpdateFrontExcluded() {
+        _frontExcluded = _frontMostApp != nil && [_excludedApps containsObject:_frontMostApp];
+    }
+
+    // ---- Auto switch per app ---------------------------------------------------------------
+    // "AutoSwitchByTyping" is the default for every app. "AutoSwitchPerApp" (bundle id -> 0/1, set from the
+    // menu bar) overrides it for one app. A choice equal to the default is not stored.
+    static NSString* const kAutoSwitchPerApp = @"AutoSwitchPerApp";
+
+    static int AutoSwitchGlobal() {
+        id on = [[NSUserDefaults standardUserDefaults] objectForKey:@"AutoSwitchByTyping"];
+        return on == nil ? 1 : ([on intValue] ? 1 : 0);
+    }
+
+    static int AutoSwitchForApp(NSString* app) {
+        if (app.length > 0) {
+            NSNumber* own = [[NSUserDefaults standardUserDefaults] dictionaryForKey:kAutoSwitchPerApp][app];
+            if (own != nil) return [own intValue] ? 1 : 0;
+        }
+        return AutoSwitchGlobal();
+    }
+
     // ---- Pause auto switch after a manual switch ----------------------------------------
     // The user just chose the language by hand: for 5 s auto switch stays out of the way (D21).
     static CFAbsoluteTime _autoPauseUntil = 0;
@@ -304,10 +335,36 @@ extern "C" {
         vAutoSwitchByTyping = 0;
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.05 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             if (AutoSwitchPaused()) return;   // a later manual switch extended it
-            id on = [[NSUserDefaults standardUserDefaults] objectForKey:@"AutoSwitchByTyping"];
-            vAutoSwitchByTyping = on == nil ? 1 : [on intValue];
+            vAutoSwitchByTyping = AutoSwitchForApp(_frontMostApp);
             StartEnglishWord(false);          // the word being typed now wasn't followed from its start
         });
+    }
+
+    /// The app in front changed: is it excluded now, and which auto switch setting applies. (The word in progress is
+    /// already reset by frontmostAppChanged: OnFocusChanged and RequestNewSession.)
+    void OnAppForExclusion() {
+        queryFrontMostApp();
+        UpdateFrontExcluded();
+        if (!AutoSwitchPaused()) vAutoSwitchByTyping = AutoSwitchForApp(_frontMostApp);   // auto switch can differ per app
+    }
+
+    int VKAutoSwitchForFrontApp() { return AutoSwitchForApp(_frontMostApp); }
+    int VKFrontAppExcluded() { return _frontExcluded ? 1 : 0; }
+    NSString* VKFrontAppName() {
+        NSRunningApplication* a = [NSRunningApplication runningApplicationsWithBundleIdentifier:_frontMostApp].firstObject;
+        return a.localizedName ?: _frontMostApp;
+    }
+
+    /// Remembers the choice for the app in front.
+    void VKSetAutoSwitchForFrontApp(int on) {
+        NSString* app = _frontMostApp;
+        if (app.length == 0) return;
+        NSUserDefaults* d = [NSUserDefaults standardUserDefaults];
+        NSMutableDictionary* m = [[d dictionaryForKey:kAutoSwitchPerApp] mutableCopy] ?: [NSMutableDictionary dictionary];
+        if ((on ? 1 : 0) == AutoSwitchGlobal()) [m removeObjectForKey:app]; else m[app] = @(on ? 1 : 0);
+        [d setObject:m forKey:kAutoSwitchPerApp];
+        if (!AutoSwitchPaused()) vAutoSwitchByTyping = AutoSwitchForApp(app);
+        StartEnglishWord(false);   // the word being typed now wasn't followed from its start
     }
 
     void VKLoadSettings() {
@@ -323,7 +380,9 @@ extern "C" {
         vTeencode = get(@"Teencode", 1);   // D53: zui zẻ, zậy, gòy, thík
         vUseModernOrthography = get(@"ModernOrthography", 1);
                 vUseSmartSwitchKey = get(@"UseSmartSwitchKey", 1);
-        vAutoSwitchByTyping = AutoSwitchPaused() ? 0 : get(@"AutoSwitchByTyping", 1);
+        vAutoSwitchByTyping = AutoSwitchPaused() ? 0 : AutoSwitchForApp(_frontMostApp);
+        _excludedApps = [NSSet setWithArray:[d arrayForKey:@"ExcludedApps"] ?: @[]];
+        UpdateFrontExcluded();
         vTypingLogKeys = get(@"TypingLogKeys", 1);
         vTypingLogEnabled = get(@"TypingLogEnabled", 0);
         int hotkey = get(@"SwitchKeyStatus", 0);
@@ -333,6 +392,7 @@ extern "C" {
     }
 
     void VikeyInit() {
+        queryFrontMostApp();   // so the excluded-app check is right from the first key
         VKLoadSettings();
         _tlApp = [[NSWorkspace sharedWorkspace] frontmostApplication].bundleIdentifier ?: ([[NSWorkspace sharedWorkspace] frontmostApplication].localizedName ?: @"");
         [NSTimer scheduledTimerWithTimeInterval:10 repeats:YES block:^(NSTimer* t) { TLFlush(); }];
@@ -439,6 +499,8 @@ extern "C" {
         ResetEnglishWord(true);   // switched from the menu or the control panel: nothing to look back on
         if (vUseSmartSwitchKey) {
             queryFrontMostApp();
+            UpdateFrontExcluded();
+            if (_frontExcluded) return;   // no language memory inside an excluded app (it would apply after un-excluding)
             setAppInputMethodStatus(SmartSwitchContextKey(), vLanguage);
             saveSmartSwitchKeyData();
         }
@@ -1060,7 +1122,8 @@ extern "C" {
         }
         
         // emoji picker hotkey: a key with exactly these modifiers
-        if (type == kCGEventKeyDown && vEmojiHotkey && GET_SWITCH_KEY(vEmojiHotkey) == _keycode &&
+        // (not in an excluded app: there the key belongs to that app)
+        if (type == kCGEventKeyDown && vEmojiHotkey && !_frontExcluded && GET_SWITCH_KEY(vEmojiHotkey) == _keycode &&
             HAS_CONTROL(vEmojiHotkey) == GET_BOOL(_flag & kCGEventFlagMaskControl) && HAS_OPTION(vEmojiHotkey) == GET_BOOL(_flag & kCGEventFlagMaskAlternate) &&
             HAS_COMMAND(vEmojiHotkey) == GET_BOOL(_flag & kCGEventFlagMaskCommand) && HAS_SHIFT(vEmojiHotkey) == GET_BOOL(_flag & kCGEventFlagMaskShift)) {
             if (vEmojiHandler) dispatch_async(dispatch_get_main_queue(), vEmojiHandler);
@@ -1095,6 +1158,9 @@ extern "C" {
                 _hasJustUsedHotKey = false;
             }
         }
+
+        // an excluded app (remote desktop...) is in front: every key goes through as typed
+        if (_frontExcluded) return event;
 
         // the emoji picker reads raw keys for its search (it does its own Telex reading)
         if (vEmojiOpen) return event;
@@ -1189,6 +1255,11 @@ extern "C" {
     void RequestNewSession(void);
     void OnActiveAppChanged(void);
     void OnInputMethodChanged(void);
+    void OnAppForExclusion(void);
+    int VKAutoSwitchForFrontApp(void);
+    int VKFrontAppExcluded(void);
+    NSString* VKFrontAppName(void);
+    void VKSetAutoSwitchForFrontApp(int on);
 }
 
 /// Saves the language, remembers it for the current app/site if asked, and tells the UI.
@@ -1296,8 +1367,14 @@ static NSTimer* _watchdog = nil;
     OnFocusChanged();
     if (!_inited) return;
     RequestNewSession();
-    if (vUseSmartSwitchKey) OnActiveAppChanged();
+    OnAppForExclusion();
+    if (vUseSmartSwitchKey && !_frontExcluded) OnActiveAppChanged();   // no language memory inside an excluded app
 }
+
++ (BOOL)autoSwitchEnabledForFrontApp { return VKAutoSwitchForFrontApp() != 0; }
++ (BOOL)frontAppIsExcluded { return VKFrontAppExcluded() != 0; }
++ (NSString *)frontAppName { return VKFrontAppName(); }
++ (void)setAutoSwitchForFrontApp:(BOOL)on { VKSetAutoSwitchForFrontApp(on ? 1 : 0); }
 
 + (void)activeSpaceChanged {
     if (_inited) RequestNewSession();
