@@ -141,6 +141,8 @@ void* vKeyInit() {
 bool isWordBreak(const vKeyEvent& event, const vKeyEventState& state, const Uint16& data) {
     if (event == vKeyEvent::Mouse)
         return true;
+    if (vTelexStyle != 0 && (data == KEY_LEFT_BRACKET || data == KEY_RIGHT_BRACKET))   //Simple Telex: brackets are punctuation (D56)
+        return true;
     for (i = 0; i < _breakCode.size(); i++) {
         if (_breakCode[i] == data) {
             return true;
@@ -1849,7 +1851,8 @@ static bool asIsSwitchBreak(const vKeyEvent& event, const Uint16& data, const Ui
     return data == KEY_COMMA || data == KEY_DOT || data == KEY_SEMICOLON || data == KEY_ENTER || data == KEY_RETURN ||
            data == KEY_QUOTE ||                                 //closing quote, or an apostrophe: doesn't, we're
            (data == KEY_SLASH && capsStatus == 1) || (data == KEY_1 && capsStatus == 1) || (data == KEY_0 && capsStatus == 1) ||
-           (data == KEY_9 && capsStatus == 1);                  //"(" right after a word: web(làm (D27)
+           (data == KEY_9 && capsStatus == 1) ||                //"(" right after a word: web(làm (D27)
+           (vTelexStyle != 0 && (data == KEY_LEFT_BRACKET || data == KEY_RIGHT_BRACKET));   //Simple Telex brackets, like ( ) (D56)
 }
 
 /** Everything the engine keeps between keys, so a word can be replayed on a scratch session. */
@@ -2296,8 +2299,8 @@ void vKeyHandleEvent(const vKeyEvent& event,
             _stateIndex--;
         }
         
-        //case [ ]: pressed twice in Telex, or once in the Simple Telex styles (D56), a bracket ends the word
-        if (IS_BRACKET_KEY(data) && (IS_BRACKET_KEY((Uint16)hData[0]) || vTelexStyle != 0)) {
+        //case [ ]
+        if (IS_BRACKET_KEY(data) && IS_BRACKET_KEY((Uint16)hData[0])) {
             if (_index - (hCode == vWillProcess ? hBPC : 0) > 0) {
                 _index--;
                 saveWord();

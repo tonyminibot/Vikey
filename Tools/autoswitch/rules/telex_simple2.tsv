@@ -10,3 +10,6 @@ D56	1	truwowngf 	trường 	1	uow still makes ươ
 D56	1	w 	ư 	1	a lone w is still ư
 D56	1	tw 	tư 	1	w after a consonant is still ư
 D56	1	W	Ư	1	a lone W is still Ư
+D56	1	zero[ 	zero[ 	0	a bracket ends the word like . or ,: an English word is put back (not zẻo[)
+D56	1	server] 	server] 	0	a closing bracket after an English word
+D56	1	2[w 	2[ư 	1	a bracket ends the digit too: the next lone w is ư

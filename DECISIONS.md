@@ -23,8 +23,8 @@ Status values: **Shipped** (in a build Tony has), **Agreed** (decided, not built
 
 **Decision.** A "Kiểu gõ" (typing style) setting on every platform, Telex by default:
 - **Telex:** as before. `[` gives ơ, `]` gives ư, a lone `w` gives ư.
-- **Simple Telex 1:** `[` and `]` are brackets and end the word. A `w` that joins no vowel stays `w` (`tw` stays `tw`).
-- **Simple Telex 2:** `[` and `]` are brackets and end the word. A lone `w` still gives ư.
+- **Simple Telex 1:** `[` and `]` are brackets and end the word like `.` and `,` (spell check and auto switch run, as at any punctuation). A `w` that joins no vowel stays `w` (`tw` stays `tw`).
+- **Simple Telex 2:** `[` and `]` are brackets and end the word, as in Simple Telex 1. A lone `w` still gives ư.
 
 `uw`, `ow`, `aw` give ư, ơ, ă in all three. Users coming from OpenKey keep their Simple Telex choice. Test cases: `Tools/autoswitch/rules/telex_simple1.tsv` and `telex_simple2.tsv`.
 

@@ -99,7 +99,21 @@ void setLaunchAtLogin(bool on) {
     RegCloseKey(h);
 }
 
+/// OpenKey's input type 2 / 3 were Simple Telex 1 / 2 (D56; VNI, 1, isn't in Vikey). Its own one-time step, so people
+/// who moved from OpenKey before Vikey had the setting get it too; a style already chosen in Vikey stays.
+static void telexStyleFromOpenKey() {
+    if (has(L"MigratedTelexStyle")) return;
+    setInt(L"MigratedTelexStyle", 1);
+    if (has(L"TelexStyle")) return;
+    HKEY h; if (RegOpenKeyExW(HKEY_CURRENT_USER, L"SOFTWARE\\TuyenMai\\OpenKey", 0, KEY_READ, &h) != ERROR_SUCCESS) return;
+    DWORD v = 0, size = sizeof(v), type = 0;
+    if (RegQueryValueExW(h, L"vInputType", nullptr, &type, (LPBYTE)&v, &size) == ERROR_SUCCESS && type == REG_DWORD && (v == 2 || v == 3))
+        setInt(L"TelexStyle", (int)v - 1);
+    RegCloseKey(h);
+}
+
 void migrateFromOpenKey() {
+    telexStyleFromOpenKey();
     if (has(L"MigratedFromOpenKey")) return;
     setInt(L"MigratedFromOpenKey", 1);
     HKEY h; if (RegOpenKeyExW(HKEY_CURRENT_USER, L"SOFTWARE\\TuyenMai\\OpenKey", 0, KEY_READ, &h) != ERROR_SUCCESS) return;
@@ -110,11 +124,6 @@ void migrateFromOpenKey() {
     for (auto& m : map) {
         DWORD v = 0, size = sizeof(v), type = 0;
         if (RegQueryValueExW(h, m.from, nullptr, &type, (LPBYTE)&v, &size) == ERROR_SUCCESS && type == REG_DWORD && !has(m.to)) setInt(m.to, (int)v);
-    }
-    {   // OpenKey's input type: 2 / 3 were Simple Telex 1 / 2 (D56); VNI (1) isn't in Vikey
-        DWORD v = 0, size = sizeof(v), type = 0;
-        if (RegQueryValueExW(h, L"vInputType", nullptr, &type, (LPBYTE)&v, &size) == ERROR_SUCCESS && type == REG_DWORD && (v == 2 || v == 3) && !has(L"TelexStyle"))
-            setInt(L"TelexStyle", (int)v - 1);
     }
     DWORD size = 0, type = 0;
     if (RegQueryValueExW(h, L"smartSwitchKey", nullptr, &type, nullptr, &size) == ERROR_SUCCESS && size > 0 && !has(L"smartSwitchKey")) {
