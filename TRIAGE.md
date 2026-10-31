@@ -53,8 +53,11 @@ No reproduction label is added when no attempt was made, for example when it nee
 2. Review the diff: correctness, edge cases, consistency with [DECISIONS.md](DECISIONS.md) and the platform code,
    and anything security-sensitive (`.github/`, `Tools/release/`, signing, the updater, code that downloads or
    runs other code). Then approve, comment, or request changes.
-3. Code from contributors is read, never run on maintainer machines. CI for a first-time contributor's PR runs only
+3. A PR that adds a feature or changes behaviour (what is typed, when auto switch triggers, what the app shows)
+   must include a screenshot or a short demo video of the new behaviour. Without one, ask for it in a comment and
+   request changes; the PR is not approved until it is there.
+4. Code from contributors is read, never run on maintainer machines. CI for a first-time contributor's PR runs only
    after a maintainer approves the run in GitHub Actions.
-4. CodeRabbit reviews every PR automatically ([.coderabbit.yaml](.coderabbit.yaml)), and a bot comment compares the
+5. CodeRabbit reviews every PR automatically ([.coderabbit.yaml](.coderabbit.yaml)), and a bot comment compares the
    typing engine's test and simulation metrics with `main` ([.github/workflows/pr-report.yml](.github/workflows/pr-report.yml)).
-5. Only the maintainer merges.
+6. Only the maintainer merges.
