@@ -1137,22 +1137,6 @@
         }
       }
     },
-    "Telex: [ ra ơ, ] ra ư, w ra ư. Telex đơn giản 1: [ ] là dấu ngoặc, w đứng riêng vẫn là w. Telex đơn giản 2: [ ] là dấu ngoặc, w vẫn ra ư. Cả ba kiểu đều gõ uw, ow, aw ra ư, ơ, ă.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Telex: [ types ơ, ] types ư, w types ư. Simple Telex 1: [ and ] are brackets, and a lone w stays w. Simple Telex 2: [ and ] are brackets, and w still types ư. In all three, uw, ow and aw type ư, ơ and ă."
-          }
-        },
-        "vi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Telex: [ ra ơ, ] ra ư, w ra ư. Telex đơn giản 1: [ ] là dấu ngoặc, w đứng riêng vẫn là w. Telex đơn giản 2: [ ] là dấu ngoặc, w vẫn ra ư. Cả ba kiểu đều gõ uw, ow, aw ra ư, ơ, ă."
-          }
-        }
-      }
-    },
     "Telex": {
       "localizations": {
         "en": {
@@ -1197,6 +1181,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Telex đơn giản 2"
+          }
+        }
+      }
+    },
+    "Telex và Telex đơn giản 2: w đứng riêng ra ư. Telex đơn giản 1: w đứng riêng vẫn là w. Cả ba kiểu đều gõ uw, ow, aw ra ư, ơ, ă. Trên bàn phím điện thoại, [ và ] luôn là dấu ngoặc.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Telex and Simple Telex 2: a lone w types ư. Simple Telex 1: a lone w stays w. In all three, uw, ow and aw type ư, ơ and ă. On the phone keyboard, [ and ] are always brackets."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Telex và Telex đơn giản 2: w đứng riêng ra ư. Telex đơn giản 1: w đứng riêng vẫn là w. Cả ba kiểu đều gõ uw, ow, aw ra ư, ơ, ă. Trên bàn phím điện thoại, [ và ] luôn là dấu ngoặc."
           }
         }
       }

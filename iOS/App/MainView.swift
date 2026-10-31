@@ -64,7 +64,7 @@ struct MainView: View {
                         Text("Telex").tag(0)
                         Text("Telex đơn giản 1").tag(1)
                         Text("Telex đơn giản 2").tag(2)
-                    } label: { Tip("Kiểu gõ", "Telex: [ ra ơ, ] ra ư, w ra ư. Telex đơn giản 1: [ ] là dấu ngoặc, w đứng riêng vẫn là w. Telex đơn giản 2: [ ] là dấu ngoặc, w vẫn ra ư. Cả ba kiểu đều gõ uw, ow, aw ra ư, ơ, ă.") }
+                    } label: { Tip("Kiểu gõ", "Telex và Telex đơn giản 2: w đứng riêng ra ư. Telex đơn giản 1: w đứng riêng vẫn là w. Cả ba kiểu đều gõ uw, ow, aw ra ư, ơ, ă. Trên bàn phím điện thoại, [ và ] luôn là dấu ngoặc.") }
                     Picker(selection: $modern) {
                         Text("hoà, thuý").tag(true)
                         Text("hòa, thúy").tag(false)

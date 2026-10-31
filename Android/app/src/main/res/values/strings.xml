@@ -24,7 +24,7 @@
     <string name="web_english_tip">In web address, email and web search fields, Vikey starts in English and goes back to your previous language when you leave the field.</string>
     <string name="sec_vietnamese">Vietnamese typing</string>
     <string name="telex_style">Typing style</string>
-    <string name="telex_style_tip">Telex: [ types ơ, ] types ư, w types ư. Simple Telex 1: [ and ] are brackets, and a lone w stays w. Simple Telex 2: [ and ] are brackets, and w still types ư. In all three, uw, ow and aw type ư, ơ and ă.</string>
+    <string name="telex_style_tip">Telex and Simple Telex 2: a lone w types ư. Simple Telex 1: a lone w stays w. In all three, uw, ow and aw type ư, ơ and ă. On the phone keyboard, [ and ] are always brackets.</string>
     <string name="telex_simple1">Simple Telex 1</string>
     <string name="telex_simple2">Simple Telex 2</string>
     <string name="tone_placement">Tone placement</string>

@@ -125,6 +125,9 @@ static std::string utf8(const std::u16string& s) {
 }
 
 // usage: harness <startLang 0|1> <keys>   or   harness bench
+#ifndef _MSC_VER   // weak: Engine.cpp has the real one; the quality scorecard also builds this against older engines (D56)
+int vTelexStyle __attribute__((weak)) = 0;
+#endif
 int main(int argc, char** argv) {
     if (getenv("VIKEY_TEENCODE")) vTeencode = atoi(getenv("VIKEY_TEENCODE"));   // D53 experiments (on by default)
     if (getenv("VIKEY_TELEX_STYLE")) vTelexStyle = atoi(getenv("VIKEY_TELEX_STYLE"));   // D56: 1 / 2 = Simple Telex 1 / 2
