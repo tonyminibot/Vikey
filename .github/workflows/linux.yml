@@ -6,7 +6,7 @@ on:
     paths: [Engine/**, Tools/autoswitch/**, Linux/**, .github/workflows/linux.yml]
   pull_request:
     paths: [Engine/**, Tools/autoswitch/**, Linux/**, .github/workflows/linux.yml]
-  # a maintainer's approval runs CI for a PR from a fork without the separate "approve workflows" step
+  # an approval (a maintainer or CodeRabbit) runs CI for a PR from a fork without the separate "approve workflows" step
   # (GitHub-hosted runners, no secrets, read-only token; see TRIAGE.md)
   pull_request_review:
     types: [submitted]
@@ -17,7 +17,7 @@ on:
         required: false
 jobs:
   engine:
-    if: github.event_name != 'pull_request_review' || (github.event.review.state == 'approved' && contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.review.author_association) && github.event.pull_request.head.repo.full_name != github.repository)
+    if: github.event_name != 'pull_request_review' || (github.event.review.state == 'approved' && (contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.review.author_association) || github.event.review.user.login == 'coderabbitai[bot]') && github.event.pull_request.head.repo.full_name != github.repository)
     strategy:
       fail-fast: false
       matrix:

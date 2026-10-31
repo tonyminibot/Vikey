@@ -4,13 +4,13 @@ name: Engine rules
 on:
   push:
   pull_request:
-  # a maintainer's approval runs CI for a PR from a fork without the separate "approve workflows" step
+  # an approval (a maintainer or CodeRabbit) runs CI for a PR from a fork without the separate "approve workflows" step
   # (GitHub-hosted runners, no secrets, read-only token; see TRIAGE.md)
   pull_request_review:
     types: [submitted]
 jobs:
   check:
-    if: github.event_name != 'pull_request_review' || (github.event.review.state == 'approved' && contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.review.author_association) && github.event.pull_request.head.repo.full_name != github.repository)
+    if: github.event_name != 'pull_request_review' || (github.event.review.state == 'approved' && (contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.review.author_association) || github.event.review.user.login == 'coderabbitai[bot]') && github.event.pull_request.head.repo.full_name != github.repository)
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -34,7 +34,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with: { name: check-log, path: check.log, retention-days: 7, if-no-files-found: ignore }
   app:
-    if: github.event_name != 'pull_request_review' || (github.event.review.state == 'approved' && contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.review.author_association) && github.event.pull_request.head.repo.full_name != github.repository)
+    if: github.event_name != 'pull_request_review' || (github.event.review.state == 'approved' && (contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.review.author_association) || github.event.review.user.login == 'coderabbitai[bot]') && github.event.pull_request.head.repo.full_name != github.repository)
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -44,7 +44,7 @@ jobs:
           xcodegen generate
           xcodebuild -project Vikey.xcodeproj -scheme Vikey -configuration Release CODE_SIGNING_ALLOWED=NO build
   ios:
-    if: github.event_name != 'pull_request_review' || (github.event.review.state == 'approved' && contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.review.author_association) && github.event.pull_request.head.repo.full_name != github.repository)
+    if: github.event_name != 'pull_request_review' || (github.event.review.state == 'approved' && (contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.review.author_association) || github.event.review.user.login == 'coderabbitai[bot]') && github.event.pull_request.head.repo.full_name != github.repository)
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
