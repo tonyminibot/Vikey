@@ -6,6 +6,10 @@ on:
     paths: ['Android/**', 'Engine/**', 'project.yml', '.github/workflows/android.yml']
   pull_request:
     paths: ['Android/**', 'Engine/**']
+  # a maintainer's approval runs CI for a PR from a fork without the separate "approve workflows" step
+  # (GitHub-hosted runners, no secrets, read-only token; see TRIAGE.md)
+  pull_request_review:
+    types: [submitted]
   workflow_dispatch:
     inputs:
       release_tag:
@@ -15,6 +19,7 @@ on:
 
 jobs:
   build:
+    if: github.event_name != 'pull_request_review' || (github.event.review.state == 'approved' && contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.review.author_association) && github.event.pull_request.head.repo.full_name != github.repository)
     runs-on: ubuntu-latest
     permissions: { contents: write }
     steps:

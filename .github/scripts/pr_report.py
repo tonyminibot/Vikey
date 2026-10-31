@@ -73,7 +73,10 @@ def fmt(v, d): return f"{v:.{d}f}" if d else f"{int(v)}"
 prs = [p for page in (1, 2, 3) for p in api(f"/repos/{REPO}/pulls?state=open&per_page=100&page={page}")]
 pr = next((p for p in prs if p["head"]["sha"] == SHA), None)
 if not pr: print("no open PR at", SHA); sys.exit(0)
-runs = [r for r in api(f"/repos/{REPO}/actions/runs?head_sha={SHA}&event=pull_request&per_page=30")["workflow_runs"] if r["name"] == "Engine rules"]
+# a PR's run comes from pull_request, or for a fork from a maintainer's approval (pull_request_review)
+runs = [r for ev in ("pull_request", "pull_request_review")
+        for r in api(f"/repos/{REPO}/actions/runs?head_sha={SHA}&event={ev}&per_page=30")["workflow_runs"]
+        if r["name"] == "Engine rules" and r["conclusion"] not in ("action_required", "skipped")]
 run = max(runs, key=lambda r: r["run_number"]) if runs else None
 if not run or run["status"] != "completed" or run["conclusion"] == "action_required": print("engine run not done"); sys.exit(0)
 mains = [r for r in api(f"/repos/{REPO}/actions/runs?branch=main&event=push&status=completed&per_page=20")["workflow_runs"] if r["name"] == "Engine rules"]

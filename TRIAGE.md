@@ -56,8 +56,9 @@ No reproduction label is added when no attempt was made, for example when it nee
 3. A PR that adds a feature or changes behaviour (what is typed, when auto switch triggers, what the app shows)
    must include a screenshot or a short demo video of the new behaviour. Without one, ask for it in a comment and
    request changes; the PR is not approved until it is there.
-4. Code from contributors is read, never run on maintainer machines. CI for a first-time contributor's PR runs only
-   after a maintainer approves the run in GitHub Actions.
+4. Code from contributors is read, never run on maintainer machines. CI for a PR from a fork starts when a
+   maintainer approves the PR (a `pull_request_review` trigger in each workflow): it runs on GitHub-hosted runners,
+   without secrets and with a read-only token. Approvals from bots, such as CodeRabbit, do not start it.
 5. CodeRabbit reviews every PR automatically ([.coderabbit.yaml](.coderabbit.yaml)), and a bot comment compares the
    typing engine's test and simulation metrics with `main` ([.github/workflows/pr-report.yml](.github/workflows/pr-report.yml)).
 6. Only the maintainer merges.
