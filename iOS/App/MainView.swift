@@ -6,6 +6,7 @@ struct MainView: View {
     @AppStorage(VKSettings.Key.pauseAfterManual, store: VKSettings.defaults) private var pause = true
     @AppStorage(VKSettings.Key.englishForWebFields, store: VKSettings.defaults) private var webEnglish = true
     @AppStorage(VKSettings.Key.modernOrthography, store: VKSettings.defaults) private var modern = true
+    @AppStorage(VKSettings.Key.telexStyle, store: VKSettings.defaults) private var telexStyle = 0
     @AppStorage(VKSettings.Key.spelling, store: VKSettings.defaults) private var spelling = true
     @AppStorage(VKSettings.Key.restoreIfInvalid, store: VKSettings.defaults) private var restore = true
     @AppStorage(VKSettings.Key.autoCapitalize, store: VKSettings.defaults) private var autoCap = true
@@ -59,6 +60,11 @@ struct MainView: View {
                     Toggle(isOn: $webEnglish) { Tip("Tiếng Anh cho web, email", "Trong ô nhập địa chỉ web, email hoặc tìm kiếm web, Vikey bắt đầu bằng tiếng Anh và quay lại ngôn ngữ cũ khi bạn rời ô đó.") }
                 }
                 Section("Gõ tiếng Việt") {
+                    Picker(selection: $telexStyle) {
+                        Text("Telex").tag(0)
+                        Text("Telex đơn giản 1").tag(1)
+                        Text("Telex đơn giản 2").tag(2)
+                    } label: { Tip("Kiểu gõ", "Telex: [ ra ơ, ] ra ư, w ra ư. Telex đơn giản 1: [ ] là dấu ngoặc, w đứng riêng vẫn là w. Telex đơn giản 2: [ ] là dấu ngoặc, w vẫn ra ư. Cả ba kiểu đều gõ uw, ow, aw ra ư, ơ, ă.") }
                     Picker(selection: $modern) {
                         Text("hoà, thuý").tag(true)
                         Text("hòa, thúy").tag(false)

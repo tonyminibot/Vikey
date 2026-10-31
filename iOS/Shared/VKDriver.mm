@@ -60,6 +60,8 @@ static bool KeyFor(unichar c, Uint16 &key, bool &shift) {
 - (void)setRestoreIfInvalid:(BOOL)on { vRestoreIfWrongSpelling = on; }
 - (BOOL)modernOrthography { return vUseModernOrthography; }
 - (void)setModernOrthography:(BOOL)on { vUseModernOrthography = on; }
+- (NSInteger)telexStyle { return vTelexStyle; }
+- (void)setTelexStyle:(NSInteger)style { vTelexStyle = (int)MAX(0, MIN(2, style)); }
 
 
 - (VKEditResult *)convert:(const ::VKEdit &)e {

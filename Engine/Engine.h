@@ -145,6 +145,10 @@ void vAutoSwitchForget();
 /** Teencode spelling (D53): z/dz for d, open "ie"/"oy", k after i/ư. On (1) by default. Defined in Engine.cpp. */
 extern int vTeencode;
 
+/** Telex style (D56): 0 = Telex, 1 = Simple Telex 1 ([ and ] are brackets, a lone w stays w),
+ *  2 = Simple Telex 2 ([ and ] are brackets, a lone w is still ư). uw / ow / aw work in all three. Defined in Engine.cpp. */
+extern int vTelexStyle;
+
 /**
  * Call at the end of the first English word after a doubled tone key switched to English (D18).
  * keys: the letters typed since the switch. When the word with both presses of the key is not

@@ -133,6 +133,7 @@ static void refreshEnabled() {
 static void syncSeg() { int vi = prefs::getInt("InputMethod", 1); gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(_seg[0]), vi); gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(_seg[1]), !vi); }
 static gboolean onSwitch(GtkSwitch* s, gboolean state, gpointer key) { prefs::setInt((const char*)key, state ? 1 : 0); gtk_switch_set_state(s, state); if (_hint) refreshEnabled(); return TRUE; }
 static void onSeg(GtkToggleButton* b, gpointer which) { if (!gtk_toggle_button_get_active(b)) return; if ((prefs::getInt("InputMethod", 1) != 0) == (GPOINTER_TO_INT(which) == 0)) return; prefs::sendCommand(GPOINTER_TO_INT(which) == 0 ? "lang vi user" : "lang en user"); }
+static void onStyle(GObject* dd, GParamSpec*, gpointer) { prefs::setInt("TelexStyle", (int)gtk_drop_down_get_selected(GTK_DROP_DOWN(dd))); }
 static void onMark(GObject* dd, GParamSpec*, gpointer) { prefs::setInt("ModernOrthography", gtk_drop_down_get_selected(GTK_DROP_DOWN(dd)) == 0 ? 1 : 0); }
 static gboolean onBeep(GtkSwitch* s, gboolean state, gpointer) { int hk = (currentHotkey() & ~0x8000) | (state ? 0x8000 : 0); prefs::setInt("SwitchKeyStatus", hk); gtk_switch_set_state(s, state); return TRUE; }
 GtkWidget* switchHotkeyRecorder() { return recorderNew([] { return currentHotkey(); }, [](int k) { prefs::setInt("SwitchKeyStatus", k | (currentHotkey() & 0x8000)); }, true, false); }
@@ -196,6 +197,10 @@ void buildMain(GtkApplication* app) {
     switchRow(g2, "Nhớ theo ứng dụng", "Vikey nhớ bạn dùng tiếng Anh hay tiếng Việt ở mỗi ứng dụng và tự chuyển lại khi bạn quay về ứng dụng đó. Trên Wayland chỉ với ứng dụng X11.", "UseSmartSwitchKey", 1);
     // Vietnamese typing
     GtkWidget* g3 = group(page, "Gõ tiếng Việt");
+    GtkWidget* styleRow = row(g3, "Kiểu gõ", "Telex: [ ra ơ, ] ra ư, w ra ư. Telex đơn giản 1: [ ] là dấu ngoặc, w đứng riêng vẫn là w. Telex đơn giản 2: [ ] là dấu ngoặc, w vẫn ra ư. Cả ba kiểu đều gõ uw, ow, aw ra ư, ơ, ă.");
+    const char* styles[] = {"Telex", "Telex đơn giản 1", "Telex đơn giản 2", nullptr}; GtkWidget* sd = gtk_drop_down_new_from_strings(styles); gtk_widget_set_valign(sd, GTK_ALIGN_CENTER);
+    gtk_drop_down_set_selected(GTK_DROP_DOWN(sd), (guint)std::min(2, std::max(0, prefs::getInt("TelexStyle", 0))));
+    g_signal_connect(sd, "notify::selected", G_CALLBACK(onStyle), nullptr); adw_action_row_add_suffix(ADW_ACTION_ROW(styleRow), sd);
     GtkWidget* markRow = row(g3, "Đặt dấu", "Vị trí dấu thanh với oa, oe, uy: kiểu mới (hoà, thuý) hoặc kiểu cũ (hòa, thúy).");
     const char* marks[] = {"hoà, thuý", "hòa, thúy", nullptr}; GtkWidget* dd = gtk_drop_down_new_from_strings(marks); gtk_widget_set_valign(dd, GTK_ALIGN_CENTER); gtk_drop_down_set_selected(GTK_DROP_DOWN(dd), prefs::getInt("ModernOrthography", 1) ? 0 : 1);
     g_signal_connect(dd, "notify::selected", G_CALLBACK(onMark), nullptr); adw_action_row_add_suffix(ADW_ACTION_ROW(markRow), dd);

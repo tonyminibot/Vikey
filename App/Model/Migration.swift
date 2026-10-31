@@ -15,6 +15,8 @@ enum Migration {
         for key in keys {
             if let value = old.object(forKey: key) { defaults.set(value, forKey: key) }
         }
+        // OpenKey's input type: 2 / 3 were Simple Telex 1 / 2 (D56); VNI (1) isn't in Vikey
+        if let t = old.object(forKey: "InputType") as? Int, t == 2 || t == 3 { defaults.set(t - 1, forKey: PrefKey.telexStyle) }
         // typing log file
         let fm = FileManager.default
         if let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {

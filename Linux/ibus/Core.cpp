@@ -156,6 +156,7 @@ void reloadSettings() {
     vCheckSpelling = prefs::getInt("Spelling", 1); vSetCheckSpelling();
     vRestoreIfWrongSpelling = prefs::getInt("RestoreIfInvalidWord", 1);
     vUseModernOrthography = prefs::getInt("ModernOrthography", 1);
+    vTelexStyle = prefs::getInt("TelexStyle", 0);   // D56: Telex / Simple Telex 1 / 2
     vUseSmartSwitchKey = prefs::getInt("UseSmartSwitchKey", 1);
     vAutoSwitchByTyping = AutoSwitchPaused() ? 0 : prefs::getInt("AutoSwitchByTyping", 1);
     vTypingLogKeys = prefs::getInt("TypingLogKeys", 1);

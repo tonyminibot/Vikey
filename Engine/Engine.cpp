@@ -165,6 +165,7 @@ Byte _spellingEndIndex = 0;
  *  z / dz for d ("zui zẻ", "zô", "dzô"), the open rimes "ie" ("bíe") and "oy" ("gòy"), and k after i or ư ("thík",
  *  "ừk"). Idea from VietTelex (MIT). "wá" isn't possible in Telex: w is ư. */
 int vTeencode = 1;   //on by default (Tony, 2026-10-31)
+int vTelexStyle = 0;  //Telex (D56); 1 and 2 are the Simple Telex styles from OpenKey
 #include "TeencodeData.h"
 static bool _teenRule = false;   //this word is valid only by a teencode rule: kept at its end only if it's a known word
 /** Is the word in TypingWord a known teencode word? (letters with ^ / +, tone digit last; see build_teencode.py) */
@@ -1225,7 +1226,7 @@ void handleMainKey(const Uint16& data, const bool& isCaps) {
     }
     
     if (!isChanged) {
-        if (data == KEY_W) {
+        if (data == KEY_W && vTelexStyle != 1) {   //Simple Telex 1: a w that joins no vowel stays w (D56)
             checkForStandaloneChar(data, isCaps, KEY_U);
         } else {
             insertKey(data, isCaps);
@@ -2295,8 +2296,8 @@ void vKeyHandleEvent(const vKeyEvent& event,
             _stateIndex--;
         }
         
-        //case [ ]
-        if (IS_BRACKET_KEY(data) && IS_BRACKET_KEY((Uint16)hData[0])) {
+        //case [ ]: pressed twice in Telex, or once in the Simple Telex styles (D56), a bracket ends the word
+        if (IS_BRACKET_KEY(data) && (IS_BRACKET_KEY((Uint16)hData[0]) || vTelexStyle != 0)) {
             if (_index - (hCode == vWillProcess ? hBPC : 0) > 0) {
                 _index--;
                 saveWord();

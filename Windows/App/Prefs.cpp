@@ -111,6 +111,11 @@ void migrateFromOpenKey() {
         DWORD v = 0, size = sizeof(v), type = 0;
         if (RegQueryValueExW(h, m.from, nullptr, &type, (LPBYTE)&v, &size) == ERROR_SUCCESS && type == REG_DWORD && !has(m.to)) setInt(m.to, (int)v);
     }
+    {   // OpenKey's input type: 2 / 3 were Simple Telex 1 / 2 (D56); VNI (1) isn't in Vikey
+        DWORD v = 0, size = sizeof(v), type = 0;
+        if (RegQueryValueExW(h, L"vInputType", nullptr, &type, (LPBYTE)&v, &size) == ERROR_SUCCESS && type == REG_DWORD && (v == 2 || v == 3) && !has(L"TelexStyle"))
+            setInt(L"TelexStyle", (int)v - 1);
+    }
     DWORD size = 0, type = 0;
     if (RegQueryValueExW(h, L"smartSwitchKey", nullptr, &type, nullptr, &size) == ERROR_SUCCESS && size > 0 && !has(L"smartSwitchKey")) {
         std::vector<BYTE> d(size);
