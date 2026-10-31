@@ -505,6 +505,11 @@ void restoreLastTypingState() {
                     TypingWord[i] = _typingStatesData[i];
                 }
                 _index = (Byte)_typingStatesData.size();
+                //the word is back after Backspace took the punctuation behind it ("việt." ⌫): its keys must come back
+                //too, or a restore at the next space put back only the keys typed since ("việt." ⌫ "nam " gave "nam")
+                _stateIndex = 0; _statesLost = false;
+                asResyncStates();
+                if (_stateIndex == 0 && _index > 0) _statesLost = true;   //keys can't be rebuilt: never restore this word
             }
         }
     }
