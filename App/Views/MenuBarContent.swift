@@ -22,7 +22,10 @@ struct MenuBarContent: View {
             } else {
                 Toggle("Tự chuyển ở \(app)", isOn: Binding(
                     get: { VikeyCore.autoSwitchEnabledForFrontApp() },
-                    set: { VikeyCore.setAutoSwitchForFrontApp($0) }))
+                    set: {
+                        VikeyCore.setAutoSwitchForFrontApp($0)
+                        state.frontAppChanged()
+                    }))
             }
         }
         Divider()
