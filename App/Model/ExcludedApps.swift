@@ -40,6 +40,9 @@ enum ExcludedApps {
 
     static func resetToDefaults() { set(defaults) }
 
+    /// Installed on this Mac. The settings list only shows these; the others stay excluded in case they get installed.
+    static func isInstalled(_ id: String) -> Bool { NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) != nil }
+
     /// The name and icon of an installed app, falling back to the bundle id when it isn't installed.
     static func info(_ id: String) -> (name: String, icon: NSImage?) {
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) else { return (id, nil) }

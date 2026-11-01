@@ -10,17 +10,10 @@ enum MainWindowProposals {
         let dark = UserDefaults.standard.bool(forKey: "renderDark")
         NSApp.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         let suffix = dark ? "-dark" : ""
-        render(AnyView(MainView().environmentObject(AppState.shared)), "0-current\(suffix)", dir)
-        render(AnyView(ProposalA(expanded: [])), "A1-sections-collapsed\(suffix)", dir)
-        render(AnyView(ProposalA(expanded: ["auto", "viet"])), "A2-sections-open\(suffix)", dir)
-        render(AnyView(ProposalA2(expanded: ["auto", "viet"])), "A3-headers-open\(suffix)", dir)
-        render(AnyView(ProposalA4(expanded: [])), "A4-cards-closed\(suffix)", dir)
-        render(AnyView(ProposalA4(expanded: ["auto", "viet"])), "A4-cards-open\(suffix)", dir)
-        render(AnyView(ProposalA4(expanded: ["auto", "viet", "emoji", "general"])), "A4-cards-all-open\(suffix)", dir)
-        render(AnyView(ProposalB(tab: 0)), "B1-tabs-general\(suffix)", dir)
-        render(AnyView(ProposalB(tab: 1)), "B2-tabs-typing\(suffix)", dir)
-        render(AnyView(ProposalC(more: false)), "C1-essentials\(suffix)", dir)
-        render(AnyView(ProposalC(more: true)), "C2-essentials-more\(suffix)", dir)
+        for tab in ["general", "auto", "viet", "emoji", "excluded"] {   // every tab of the main window
+            UserDefaults.standard.set(tab, forKey: PrefKey.mainTab)
+            render(AnyView(MainView().environmentObject(AppState.shared)), "tab-\(tab)\(suffix)", dir)
+        }
         NSApp.terminate(nil)
     }
 

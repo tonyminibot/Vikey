@@ -10,7 +10,7 @@ struct MainView: View {
     @AppStorage(PrefKey.restoreIfInvalid) private var restore = 1
     @AppStorage(PrefKey.teencode) private var teencode = 1
     @AppStorage(PrefKey.telexStyle) private var telexStyle = 0
-    @AppStorage(PrefKey.openSections) private var openSections = "auto"
+    @AppStorage(PrefKey.mainTab) private var tab = "general"
     @AppStorage(PrefKey.autoSwitch) private var autoSwitch = 1
     @AppStorage(PrefKey.smartSwitch) private var smartSwitch = 1
     @AppStorage(PrefKey.pauseAfterManual) private var pauseAfterManual = 1
@@ -25,131 +25,16 @@ struct MainView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+            tabBar
             Form {
-                Section {
-                    LabeledContent {
-                        HotkeyRecorder(raw: Binding(get: { hotkeyRaw }, set: { hotkeyRaw = $0; Preferences.apply() }))
-                    } label: {
-                        Tip("Phím chuyển Anh/Việt", "Bấm tổ hợp phím này để chuyển giữa tiếng Việt và tiếng Anh. Bấm vào ô để đặt phím khác.")
-                    }
-                    Toggle(isOn: Binding(
-                        get: { Hotkey(raw: hotkeyRaw).beep },
-                        set: { var h = Hotkey(raw: hotkeyRaw); h.beep = $0; hotkeyRaw = h.raw; Preferences.apply() })) {
-                        Tip("Âm báo khi chuyển", "Phát một âm ngắn mỗi lần bạn bấm phím chuyển Anh/Việt: lên giọng khi sang tiếng Việt, xuống giọng khi sang tiếng Anh.")
-                    }
-                }
-                Section {
-                    fold("auto", "Tự chuyển", autoSummary)
-                    if isOpen("auto") {
-                    Toggle(isOn: flag($autoSwitch)) {
-                        Tip("Tự chuyển Anh/Việt", "Gõ một từ tiếng Anh khi đang ở tiếng Việt (hoặc ngược lại), Vikey tự sửa từ đó và chuyển chế độ. Bấm Xoá ngay sau đó để hoàn tác.")
-                    }
-                    Toggle(isOn: flag($pauseAfterManual)) {
-                        Tip("Tạm dừng 5 giây", "Khi bạn tự bấm chuyển Anh/Việt, Vikey không tự chuyển trong 5 giây, để giữ đúng lựa chọn của bạn.")
-                    }
-                    .disabled(autoSwitch == 0)
-                    Toggle(isOn: flag($smartSwitch)) {
-                        Tip("Nhớ theo ứng dụng", "Vikey nhớ bạn dùng tiếng Anh hay tiếng Việt ở mỗi ứng dụng và tự chuyển lại khi bạn quay về ứng dụng đó.")
-                    }
-                    Toggle(isOn: Binding(get: { perSite }, set: { setPerSite($0) })) {
-                        Tip("Nhớ theo trang web", "Trong Safari, Chrome, Edge, Brave, Arc, Vivaldi, Opera: nhớ tiếng Anh hay tiếng Việt cho từng trang web. Cần quyền đọc địa chỉ tab đang mở, chỉ dùng trên máy bạn.")
-                    }
-                    .disabled(smartSwitch == 0)
-                    }
-                }
-                Section {
-                    fold("viet", "Gõ tiếng Việt", vietSummary)
-                    if isOpen("viet") {
-                    Picker(selection: Binding(get: { telexStyle }, set: { telexStyle = $0; Preferences.apply() })) {
-                        Text("Telex").tag(0)
-                        Text("Telex đơn giản 1").tag(1)
-                        Text("Telex đơn giản 2").tag(2)
-                    } label: {
-                        Tip("Kiểu gõ", "Telex: [ ra ơ, ] ra ư, w ra ư. Telex đơn giản 1: [ ] là dấu ngoặc, w đứng riêng vẫn là w. Telex đơn giản 2: [ ] là dấu ngoặc, w vẫn ra ư. Cả ba kiểu đều gõ uw, ow, aw ra ư, ơ, ă.")
-                    }
-                    Picker(selection: Binding(get: { modern }, set: { modern = $0; Preferences.apply() })) {
-                        Text("hoà, thuý").tag(1)
-                        Text("hòa, thúy").tag(0)
-                    } label: {
-                        Tip("Đặt dấu", "Vị trí dấu thanh với oa, oe, uy: kiểu mới (hoà, thuý) hoặc kiểu cũ (hòa, thúy).")
-                    }
-                    Toggle(isOn: flag($spelling)) {
-                        Tip("Kiểm tra chính tả", "Chỉ bỏ dấu khi từ đang gõ đúng quy tắc chính tả tiếng Việt.")
-                    }
-                    Toggle(isOn: flag($restore)) {
-                        Tip("Trả lại phím khi sai", "Khi gõ xong một từ sai chính tả tiếng Việt, Vikey trả lại đúng các phím bạn đã gõ.")
-                    }
-                    .disabled(spelling == 0)
-                    Toggle(isOn: flag($teencode)) {
-                        Tip("Chính tả teencode", "Giữ các từ kiểu chat như zui zẻ, zậy, dzô, gòy, thík, bíe thay vì trả lại phím. Chỉ những từ teencode quen thuộc, nên từ tiếng Anh như zero, look vẫn giữ nguyên.")
-                    }
-                    }
-                }
-                Section {
-                    fold("emoji", "Bảng emoji", emojiSummary)
-                    if isOpen("emoji") {
-                    Toggle(isOn: Binding(get: { emojiOn != 0 }, set: { emojiOn = $0 ? 1 : 0; Preferences.apply() })) {
-                        Tip("Bảng emoji", "Bấm phím tắt để mở bảng emoji ở giữa màn hình. Tìm bằng tiếng Việt hoặc tiếng Anh, gõ Telex vẫn tìm được: \"ngựa\", \"horse\" đều ra 🐴. Enter để chèn, Esc để đóng.")
-                    }
-                    if emojiOn != 0 {
-                        LabeledContent {
-                            HotkeyRecorder(raw: Binding(get: { emojiKey }, set: { k in
-                                guard k != hotkeyRaw & ~0x8000 else { return }   // already the Vietnamese/English switch
-                                emojiKey = k & ~0x8000; Preferences.apply()
-                            }), allowModifiersOnly: false, autoStart: emojiKey == 0)
-                        } label: {
-                            Tip("Phím mở bảng emoji", "Một phím kèm ⌃, ⌥ hoặc ⌘, ví dụ ⌃⌘E. Bấm vào ô để đặt phím khác.")
-                        }
-                    }
-                    }
-                }
-                Section {
-                    fold("excluded", "Ứng dụng loại trừ", excludedSummary)
-                    if isOpen("excluded") {
-                    Text("Trong các ứng dụng này Vikey không gõ tiếng Việt và không tự chuyển (hợp với phần mềm điều khiển máy từ xa). Phím chuyển Anh/Việt vẫn dùng được.")
-                        .font(.callout).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    ForEach(excluded, id: \.self) { id in
-                        let info = ExcludedApps.info(id)
-                        HStack(spacing: 8) {
-                            if let icon = info.icon { Image(nsImage: icon).resizable().frame(width: 18, height: 18) }
-                            else { Image(systemName: "app").frame(width: 18, height: 18).foregroundStyle(.secondary) }
-                            Text(info.name)
-                            Spacer()
-                            Button { ExcludedApps.remove(id); excluded = ExcludedApps.all } label: { Image(systemName: "minus.circle") }
-                                .buttonStyle(.plain).foregroundStyle(.secondary)
-                                .accessibilityLabel("Bỏ \(info.name)")
-                                .help(id)
-                        }
-                    }
-                    HStack {
-                        Menu("Thêm ứng dụng đang mở") {
-                            ForEach(ExcludedApps.runningApps().filter { !excluded.contains($0.id) }, id: \.id) { app in
-                                Button(app.name) { ExcludedApps.add(app.id); excluded = ExcludedApps.all }
-                            }
-                        }
-                        .fixedSize()
-                        Button("Chọn ứng dụng…") { ExcludedApps.pickAndAdd(); excluded = ExcludedApps.all }
-                        Spacer()
-                        Button("Mặc định") { ExcludedApps.resetToDefaults(); excluded = ExcludedApps.all }
-                    }
-                    }
-                }
-                Section {
-                    fold("general", "Chung", generalSummary)
-                    if isOpen("general") {
-                    Toggle(isOn: Binding(get: { launchAtLogin }, set: { LaunchAtLogin.set($0); launchAtLogin = LaunchAtLogin.isEnabled })) {
-                        Tip("Mở Vikey khi đăng nhập", "Tự mở Vikey mỗi khi bạn đăng nhập vào máy Mac.")
-                    }
-                    Toggle(isOn: Binding(get: { updater.automatic }, set: { updater.automatic = $0 })) {
-                        Tip("Tự động cập nhật", "Mỗi ngày Vikey kiểm tra bản mới trên vikey.app, tự tải về và cài khi bạn thoát Vikey hoặc tắt máy.")
-                    }
-                    LabeledContent {
-                        Button("Gửi góp ý…") { Feedback.open() }
-                    } label: {
-                        Tip("Góp ý", "Báo lỗi hoặc góp ý cho Vikey: mở trang vikey.app/feedback trong trình duyệt.")
-                    }
-                    }
+                switch tab {
+                case "auto": Section { autoRows }
+                case "viet": Section { vietRows }
+                case "emoji": Section { emojiRows }
+                case "excluded": Section { excludedRows }
+                default:
+                    Section { hotkeyRows }
+                    Section { generalRows }
                 }
             }
             .formStyle(.grouped)
@@ -168,58 +53,152 @@ struct MainView: View {
         }
     }
 
-    // MARK: cards that fold
+    // MARK: tabs
 
-    private func isOpen(_ id: String) -> Bool { openSections.split(separator: ",").contains(Substring(id)) }
+    private static let tabs: [(id: String, title: String, icon: String)] = [
+        ("general", "Chung", "gearshape"), ("auto", "Tự chuyển", "arrow.left.arrow.right"),
+        ("viet", "Gõ tiếng Việt", "character.cursor.ibeam"), ("emoji", "Emoji", "face.smiling"), ("excluded", "Loại trừ", "nosign"),
+    ]
 
-    /// A card's first row: chevron and title; closed, the line of what's on. Clicking it opens or closes the card.
-    private func fold(_ id: String, _ title: String, _ summary: String) -> some View {
-        let open = isOpen(id)
-        return Button {
-            var ids = Set(openSections.split(separator: ",").map(String.init))
-            if open { ids.remove(id) } else { ids.insert(id) }
-            openSections = ids.sorted().joined(separator: ",")
-            DispatchQueue.main.async { Windows.main.fitToContent() }   // the window grows or shrinks with the card
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
-                    .rotationEffect(.degrees(open ? 90 : 0)).frame(width: 12)
-                Text(title).fontWeight(.semibold)
-                Spacer()
-                if !open { Text(summary).foregroundStyle(.secondary).lineLimit(1) }
+    private func select(_ id: String) {
+        tab = id
+        DispatchQueue.main.async { Windows.main.fitToContent() }   // the window takes the height of the tab
+    }
+
+    private var tabBar: some View {
+        HStack(spacing: 2) {
+            ForEach(Self.tabs, id: \.id) { t in
+                let on = tab == t.id
+                Button { select(t.id) } label: {
+                    VStack(spacing: 3) {
+                        Image(systemName: t.icon).font(.system(size: 18)).frame(height: 22)
+                        Text(t.title).font(.system(size: 11))
+                    }
+                    .frame(width: 80, height: 50)
+                    .foregroundStyle(on ? Color.accentColor : Color.secondary)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(on ? Color.primary.opacity(0.08) : .clear))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(t.title)
+                .accessibilityAddTraits(on ? .isSelected : [])
             }
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(title)
-        .accessibilityValue(open ? "mở" : "đóng")
+        .padding(.top, 8)
     }
 
-    private var autoSummary: String {
-        guard autoSwitch != 0 else { return "Tắt" }
-        var parts = ["Bật"]
-        if smartSwitch != 0 { parts.append(perSite ? "nhớ theo ứng dụng, trang web" : "nhớ theo ứng dụng") }
-        return parts.joined(separator: " · ")
+    // MARK: rows of each tab
+
+    @ViewBuilder private var hotkeyRows: some View {
+                LabeledContent {
+                    HotkeyRecorder(raw: Binding(get: { hotkeyRaw }, set: { hotkeyRaw = $0; Preferences.apply() }))
+                } label: {
+                    Tip("Phím chuyển Anh/Việt", "Bấm tổ hợp phím này để chuyển giữa tiếng Việt và tiếng Anh. Bấm vào ô để đặt phím khác.")
+                }
+                Toggle(isOn: Binding(
+                    get: { Hotkey(raw: hotkeyRaw).beep },
+                    set: { var h = Hotkey(raw: hotkeyRaw); h.beep = $0; hotkeyRaw = h.raw; Preferences.apply() })) {
+                    Tip("Âm báo khi chuyển", "Phát một âm ngắn mỗi lần bạn bấm phím chuyển Anh/Việt: lên giọng khi sang tiếng Việt, xuống giọng khi sang tiếng Anh.")
+                }
     }
-    private var vietSummary: String {
-        var parts = [modern != 0 ? "hoà, thuý" : "hòa, thúy"]
-        if telexStyle != 0 { parts.insert("Telex đơn giản \(telexStyle)", at: 0) }
-        if spelling != 0 { parts.append("chính tả") }
-        if teencode != 0 { parts.append("teencode") }
-        return parts.joined(separator: " · ")
+    @ViewBuilder private var autoRows: some View {
+                Toggle(isOn: flag($autoSwitch)) {
+                    Tip("Tự chuyển Anh/Việt", "Gõ một từ tiếng Anh khi đang ở tiếng Việt (hoặc ngược lại), Vikey tự sửa từ đó và chuyển chế độ. Bấm Xoá ngay sau đó để hoàn tác.")
+                }
+                Toggle(isOn: flag($pauseAfterManual)) {
+                    Tip("Tạm dừng 5 giây", "Khi bạn tự bấm chuyển Anh/Việt, Vikey không tự chuyển trong 5 giây, để giữ đúng lựa chọn của bạn.")
+                }
+                .disabled(autoSwitch == 0)
+                Toggle(isOn: flag($smartSwitch)) {
+                    Tip("Nhớ theo ứng dụng", "Vikey nhớ bạn dùng tiếng Anh hay tiếng Việt ở mỗi ứng dụng và tự chuyển lại khi bạn quay về ứng dụng đó.")
+                }
+                Toggle(isOn: Binding(get: { perSite }, set: { setPerSite($0) })) {
+                    Tip("Nhớ theo trang web", "Trong Safari, Chrome, Edge, Brave, Arc, Vivaldi, Opera: nhớ tiếng Anh hay tiếng Việt cho từng trang web. Cần quyền đọc địa chỉ tab đang mở, chỉ dùng trên máy bạn.")
+                }
+                .disabled(smartSwitch == 0)
     }
-    private var excludedSummary: String {
-        excluded.isEmpty ? "Không có" : "\(excluded.count) ứng dụng"
+    @ViewBuilder private var vietRows: some View {
+                Picker(selection: Binding(get: { telexStyle }, set: { telexStyle = $0; Preferences.apply() })) {
+                    Text("Telex").tag(0)
+                    Text("Telex đơn giản 1").tag(1)
+                    Text("Telex đơn giản 2").tag(2)
+                } label: {
+                    Tip("Kiểu gõ", "Telex: [ ra ơ, ] ra ư, w ra ư. Telex đơn giản 1: [ ] là dấu ngoặc, w đứng riêng vẫn là w. Telex đơn giản 2: [ ] là dấu ngoặc, w vẫn ra ư. Cả ba kiểu đều gõ uw, ow, aw ra ư, ơ, ă.")
+                }
+                Picker(selection: Binding(get: { modern }, set: { modern = $0; Preferences.apply() })) {
+                    Text("hoà, thuý").tag(1)
+                    Text("hòa, thúy").tag(0)
+                } label: {
+                    Tip("Đặt dấu", "Vị trí dấu thanh với oa, oe, uy: kiểu mới (hoà, thuý) hoặc kiểu cũ (hòa, thúy).")
+                }
+                Toggle(isOn: flag($spelling)) {
+                    Tip("Kiểm tra chính tả", "Chỉ bỏ dấu khi từ đang gõ đúng quy tắc chính tả tiếng Việt.")
+                }
+                Toggle(isOn: flag($restore)) {
+                    Tip("Trả lại phím khi sai", "Khi gõ xong một từ sai chính tả tiếng Việt, Vikey trả lại đúng các phím bạn đã gõ.")
+                }
+                .disabled(spelling == 0)
+                Toggle(isOn: flag($teencode)) {
+                    Tip("Chính tả teencode", "Giữ các từ kiểu chat như zui zẻ, zậy, dzô, gòy, thík, bíe thay vì trả lại phím. Chỉ những từ teencode quen thuộc, nên từ tiếng Anh như zero, look vẫn giữ nguyên.")
+                }
     }
-    private var emojiSummary: String {
-        guard emojiOn != 0 else { return "Tắt" }
-        return emojiKey != 0 ? "Bật · \(Hotkey(raw: emojiKey).display)" : "Bật"
+    @ViewBuilder private var emojiRows: some View {
+                Toggle(isOn: Binding(get: { emojiOn != 0 }, set: { emojiOn = $0 ? 1 : 0; Preferences.apply() })) {
+                    Tip("Bảng emoji", "Bấm phím tắt để mở bảng emoji ở giữa màn hình. Tìm bằng tiếng Việt hoặc tiếng Anh, gõ Telex vẫn tìm được: \"ngựa\", \"horse\" đều ra 🐴. Enter để chèn, Esc để đóng.")
+                }
+                if emojiOn != 0 {
+                    LabeledContent {
+                        HotkeyRecorder(raw: Binding(get: { emojiKey }, set: { k in
+                            guard k != hotkeyRaw & ~0x8000 else { return }   // already the Vietnamese/English switch
+                            emojiKey = k & ~0x8000; Preferences.apply()
+                        }), allowModifiersOnly: false, autoStart: emojiKey == 0)
+                    } label: {
+                        Tip("Phím mở bảng emoji", "Một phím kèm ⌃, ⌥ hoặc ⌘, ví dụ ⌃⌘E. Bấm vào ô để đặt phím khác.")
+                    }
+                }
     }
-    private var generalSummary: String {
-        var parts: [String] = []
-        if launchAtLogin { parts.append("mở khi đăng nhập") }
-        if updater.automatic { parts.append("tự cập nhật") }
-        return parts.isEmpty ? "Góp ý" : parts.joined(separator: " · ").prefix(1).uppercased() + parts.joined(separator: " · ").dropFirst()
+    @ViewBuilder private var excludedRows: some View {
+                Text("Trong các ứng dụng này Vikey không gõ tiếng Việt và không tự chuyển (hợp với phần mềm điều khiển máy từ xa). Phím chuyển Anh/Việt vẫn dùng được.")
+                    .font(.callout).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                ForEach(excluded.filter(ExcludedApps.isInstalled), id: \.self) { id in
+                    let info = ExcludedApps.info(id)
+                    HStack(spacing: 8) {
+                        if let icon = info.icon { Image(nsImage: icon).resizable().frame(width: 18, height: 18) }
+                        else { Image(systemName: "app").frame(width: 18, height: 18).foregroundStyle(.secondary) }
+                        Text(info.name)
+                        Spacer()
+                        Button { ExcludedApps.remove(id); excluded = ExcludedApps.all } label: { Image(systemName: "minus.circle") }
+                            .buttonStyle(.plain).foregroundStyle(.secondary)
+                            .accessibilityLabel("Bỏ \(info.name)")
+                            .help(id)
+                    }
+                }
+                HStack {
+                    Menu("Thêm ứng dụng") {
+                        ForEach(ExcludedApps.runningApps().filter { !excluded.contains($0.id) }, id: \.id) { app in
+                            Button(app.name) { ExcludedApps.add(app.id); excluded = ExcludedApps.all }
+                        }
+                        Divider()
+                        Button("Chọn ứng dụng khác…") { ExcludedApps.pickAndAdd(); excluded = ExcludedApps.all }
+                    }
+                    .fixedSize()
+                    Spacer()
+                    Button("Mặc định") { ExcludedApps.resetToDefaults(); excluded = ExcludedApps.all }
+                }
+    }
+    @ViewBuilder private var generalRows: some View {
+                Toggle(isOn: Binding(get: { launchAtLogin }, set: { LaunchAtLogin.set($0); launchAtLogin = LaunchAtLogin.isEnabled })) {
+                    Tip("Mở Vikey khi đăng nhập", "Tự mở Vikey mỗi khi bạn đăng nhập vào máy Mac.")
+                }
+                Toggle(isOn: Binding(get: { updater.automatic }, set: { updater.automatic = $0 })) {
+                    Tip("Tự động cập nhật", "Mỗi ngày Vikey kiểm tra bản mới trên vikey.app, tự tải về và cài khi bạn thoát Vikey hoặc tắt máy.")
+                }
+                LabeledContent {
+                    Button("Gửi góp ý…") { Feedback.open() }
+                } label: {
+                    Tip("Góp ý", "Báo lỗi hoặc góp ý cho Vikey: mở trang vikey.app/feedback trong trình duyệt.")
+                }
     }
 
     /// Turning per-site memory on asks for the browser permission right away.
