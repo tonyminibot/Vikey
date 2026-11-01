@@ -6,6 +6,7 @@ struct TypingLogView: View {
     @State private var stats: [String: [String: Int]] = [:]
     @State private var events: [LogEvent] = []
     @State private var confirmClear = false
+    @State private var loadGeneration = 0   // the latest reload; a slower earlier one must not overwrite it
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -54,13 +55,18 @@ struct TypingLogView: View {
     }
 
     private func reload() {
-        // the log can be 20 MB: read it off the main thread, which also runs the keyboard tap
+        // the log can be 20 MB: read it off the main thread, which also runs the keyboard tap. A reload started
+        // before a clear can finish reading the old file after the reload that follows the clear: only the latest
+        // reload's result is shown.
+        loadGeneration += 1
+        let generation = loadGeneration
         VikeyCore.flushTypingLogThen {
+            guard generation == loadGeneration else { return }
             stats = (VikeyCore.typingLogStats() as? [String: [String: Int]]) ?? [:]
             let path = VikeyCore.typingLogPath()
             DispatchQueue.global(qos: .userInitiated).async {
                 let loaded = LogEvent.load(from: path, limit: 300)
-                DispatchQueue.main.async { events = loaded }
+                DispatchQueue.main.async { if generation == loadGeneration { events = loaded } }
             }
         }
     }
