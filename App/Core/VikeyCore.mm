@@ -335,7 +335,7 @@ extern "C" {
         vAutoSwitchByTyping = 0;
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.05 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             if (AutoSwitchPaused()) return;   // a later manual switch extended it
-            vAutoSwitchByTyping = AutoSwitchForApp(_frontMostApp);
+            vAutoSwitchByTyping = (vTelexStyle == 3 ? 0 : AutoSwitchForApp(_frontMostApp));
             StartEnglishWord(false);          // the word being typed now wasn't followed from its start
         });
     }
@@ -345,7 +345,7 @@ extern "C" {
     void OnAppForExclusion() {
         queryFrontMostApp();
         UpdateFrontExcluded();
-        if (!AutoSwitchPaused()) vAutoSwitchByTyping = AutoSwitchForApp(_frontMostApp);   // auto switch can differ per app
+        if (!AutoSwitchPaused()) vAutoSwitchByTyping = (vTelexStyle == 3 ? 0 : AutoSwitchForApp(_frontMostApp));   // auto switch can differ per app
     }
 
     int VKAutoSwitchForFrontApp() { return AutoSwitchForApp(_frontMostApp); }
@@ -363,7 +363,7 @@ extern "C" {
         NSMutableDictionary* m = [[d dictionaryForKey:kAutoSwitchPerApp] mutableCopy] ?: [NSMutableDictionary dictionary];
         if ((on ? 1 : 0) == AutoSwitchGlobal()) [m removeObjectForKey:app]; else m[app] = @(on ? 1 : 0);
         [d setObject:m forKey:kAutoSwitchPerApp];
-        if (!AutoSwitchPaused()) vAutoSwitchByTyping = AutoSwitchForApp(app);
+        if (!AutoSwitchPaused()) vAutoSwitchByTyping = (vTelexStyle == 3 ? 0 : AutoSwitchForApp(app));
         StartEnglishWord(false);   // the word being typed now wasn't followed from its start
     }
 
@@ -381,7 +381,7 @@ extern "C" {
         vTelexStyle = get(@"TelexStyle", 0);   // D56: Telex / Simple Telex 1 / 2
         vUseModernOrthography = get(@"ModernOrthography", 1);
                 vUseSmartSwitchKey = get(@"UseSmartSwitchKey", 1);
-        vAutoSwitchByTyping = AutoSwitchPaused() ? 0 : AutoSwitchForApp(_frontMostApp);
+        vAutoSwitchByTyping = AutoSwitchPaused() ? 0 : (vTelexStyle == 3 ? 0 : AutoSwitchForApp(_frontMostApp));
         _excludedApps = [NSSet setWithArray:[d arrayForKey:@"ExcludedApps"] ?: @[]];
         UpdateFrontExcluded();
         vTypingLogKeys = get(@"TypingLogKeys", 1);
@@ -1195,7 +1195,7 @@ extern "C" {
             if (vUseSmartSwitchKey && (_flag & (kCGEventFlagMaskCommand | kCGEventFlagMaskControl))) {
                 NudgeSiteCheck();
             }
-            if (vAutoSwitchByTyping && HandleEnglishKeyForAutoSwitch())
+            if (vAutoSwitchByTyping && vTelexStyle != 3 && HandleEnglishKeyForAutoSwitch())
                 return NULL;
             return event;
         }
@@ -1229,7 +1229,7 @@ extern "C" {
                 bool autoSwitchAtBreak = vAutoSwitchRequest == 0 && !IsLetterKey(_keycode);
                 int correctedCount = pData->newCharCount;
                 SendEngineOutput();
-                if (vAutoSwitchRequest == 0) ApplyAutoSwitchToEnglish(correctedCount, autoSwitchAtBreak);
+                if (vAutoSwitchRequest == 0 && vTelexStyle != 3) ApplyAutoSwitchToEnglish(correctedCount, autoSwitchAtBreak);
             }
             
             return NULL;

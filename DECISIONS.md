@@ -13,12 +13,13 @@ Status values: **Shipped** (in a build Tony has), **Agreed** (decided, not built
 
 **Decision.** Support VNI input method (`vTelexStyle == 3`):
 - Tone marks: 1 (sắc), 2 (huyền), 3 (hỏi), 4 (ngã), 5 (nặng).
-- Circumflex / Horn / Breve: 6 (â, ê, ô), 7 (ơ, ư), 8 (ă).
+- Circumflex / Horn / Breve: 6 (â, ê, ô), 7 (ơ, ư), 8 (ă). Modifiers scan backwards to find the compatible vowel (e.g. `yeu6` -> `yêu`, `cua7` -> `cưa`).
 - Consonant bar: 9 (đ).
 - Remove tone: 0.
 - When holding Shift, numbers type punctuation/symbols as usual (`!@#$%^&*()`).
+- Auto switch is Telex-only; disabled when VNI is selected.
 
-Test cases: `Tools/autoswitch/rules/vni.tsv` verified in `check.sh`.
+Test cases: `Tools/autoswitch/rules/vni.tsv` (23 cases) verified in `check.sh`.
 
 ---
 

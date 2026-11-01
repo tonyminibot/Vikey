@@ -1208,18 +1208,42 @@ void handleMainKey(const Uint16& data, const bool& isCaps) {
     //check Vowel
     if (vTelexStyle == 3) {
         VEI = _index;
-        for (i = _index - 1; i >= 0; i--) {
-            if (CHR(i) == KEY_O || CHR(i) == KEY_A || CHR(i) == KEY_E || CHR(i) == KEY_U) {
-                VEI = i;
-                break;
+        if (data == KEY_6) {
+            for (i = _index - 1; i >= 0; i--) {
+                if (CHR(i) == KEY_A || CHR(i) == KEY_E || CHR(i) == KEY_O) {
+                    VEI = i;
+                    break;
+                }
             }
-        }
-        if (data == KEY_7 && VEI < _index && (CHR(VEI) == KEY_O || CHR(VEI) == KEY_U)) {
-            keyForAEO = KEY_W;
-        } else if (data == KEY_8 && VEI < _index && CHR(VEI) == KEY_A) {
-            keyForAEO = KEY_W;
-        } else if (data == KEY_6 && VEI < _index && (CHR(VEI) == KEY_A || CHR(VEI) == KEY_E || CHR(VEI) == KEY_O)) {
-            keyForAEO = TypingWord[VEI];
+            if (VEI < _index) {
+                keyForAEO = TypingWord[VEI];
+            } else {
+                keyForAEO = data;
+            }
+        } else if (data == KEY_7) {
+            for (i = _index - 1; i >= 0; i--) {
+                if (CHR(i) == KEY_O || CHR(i) == KEY_U) {
+                    VEI = i;
+                    break;
+                }
+            }
+            if (VEI < _index) {
+                keyForAEO = KEY_W;
+            } else {
+                keyForAEO = data;
+            }
+        } else if (data == KEY_8) {
+            for (i = _index - 1; i >= 0; i--) {
+                if (CHR(i) == KEY_A) {
+                    VEI = i;
+                    break;
+                }
+            }
+            if (VEI < _index) {
+                keyForAEO = KEY_W;
+            } else {
+                keyForAEO = data;
+            }
         } else {
             keyForAEO = data;
         }

@@ -103,12 +103,13 @@ struct MainView: View {
     }
     @ViewBuilder private var autoRows: some View {
                 Toggle(isOn: flag($autoSwitch)) {
-                    Tip("Tự chuyển Anh/Việt", "Gõ một từ tiếng Anh khi đang ở tiếng Việt (hoặc ngược lại), Vikey tự sửa từ đó và chuyển chế độ. Bấm Xoá ngay sau đó để hoàn tác.")
+                    Tip("Tự chuyển Anh/Việt", telexStyle == 3 ? "Tự chuyển Anh/Việt chỉ áp dụng cho kiểu gõ Telex." : "Gõ một từ tiếng Anh khi đang ở tiếng Việt (hoặc ngược lại), Vikey tự sửa từ đó và chuyển chế độ. Bấm Xoá ngay sau đó để hoàn tác.")
                 }
+                .disabled(telexStyle == 3)
                 Toggle(isOn: flag($pauseAfterManual)) {
                     Tip("Tạm dừng 5 giây", "Khi bạn tự bấm chuyển Anh/Việt, Vikey không tự chuyển trong 5 giây, để giữ đúng lựa chọn của bạn.")
                 }
-                .disabled(autoSwitch == 0)
+                .disabled(autoSwitch == 0 || telexStyle == 3)
                 Toggle(isOn: flag($smartSwitch)) {
                     Tip("Nhớ theo ứng dụng", "Vikey nhớ bạn dùng tiếng Anh hay tiếng Việt ở mỗi ứng dụng và tự chuyển lại khi bạn quay về ứng dụng đó.")
                 }
@@ -124,7 +125,7 @@ struct MainView: View {
                     Text("Telex đơn giản 2").tag(2)
                     Text("VNI").tag(3)
                 } label: {
-                    Tip("Kiểu gõ", "Telex: [ ra ơ, ] ra ư, w ra ư. Telex đơn giản 1: [ ] là dấu ngoặc, w đứng riêng vẫn là w. Telex đơn giản 2: [ ] là dấu ngoặc, w vẫn ra ư. VNI: bỏ dấu bằng số 1-9 (1: sắc, 2: huyền, 3: hỏi, 4: ngã, 5: nặng, 6: â/ê/ô, 7: ơ/ư, 8: ă, 9: đ, 0: xóa dấu).")
+                    Tip("Kiểu gõ", "Telex: [ ra ơ, ] ra ư, w ra ư. Telex đơn giản 1: [ ] là dấu ngoặc, w đứng riêng vẫn là w. Telex đơn giản 2: [ ] là dấu ngoặc, w vẫn ra ư. VNI: bỏ dấu bằng số 1-9 (1: sắc, 2: huyền, 3: hỏi, 4: ngã, 5: nặng, 6: â/ê/ô, 7: ơ/ư, 8: ă, 9: đ, 0: xóa dấu). Khi chọn VNI, tự chuyển Anh/Việt tạm thời tắt để tránh xung đột phím số.")
                 }
                 Picker(selection: Binding(get: { modern }, set: { modern = $0; Preferences.apply() })) {
                     Text("hoà, thuý").tag(1)
