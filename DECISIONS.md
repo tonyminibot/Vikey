@@ -7,11 +7,11 @@ Status values: **Shipped** (in a build Tony has), **Agreed** (decided, not built
 
 ## 57. Backspace over punctuation lost the word before it
 
-**Status:** Fix (2026-11-01).
+**Status:** Agreed (2026-11-01): a bug fix, in PR #33.
 
 **Problem.** Typing a word, a punctuation mark, Backspace, then more letters and a space could erase the first word: `vieejt.` ⌫ `nam ` left only `nam`. Backspace brought back the word's letters but not its keys, so the restore at the space rebuilt the word from the new keys alone.
 
-**Fix.** When Backspace brings a word back, its keys are rebuilt from the letters (as after D50). A word whose keys can't be rebuilt is never restored. Cases tagged D57 in `rules.tsv`.
+**Fix.** When Backspace brings a word back, its keys are rebuilt from the letters (as after D50). A word whose keys can't all be rebuilt (a very long word, or a character no key makes) is never restored. Cases tagged D57 in `rules.tsv`.
 
 ---
 
