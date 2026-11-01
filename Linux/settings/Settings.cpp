@@ -245,7 +245,8 @@ static int statSum(int days, const char* name) {
 }
 static std::string jget(const std::string& j, const char* key) { std::string k = std::string("\"") + key + "\":"; size_t p = j.find(k); if (p == std::string::npos) return ""; p += k.size(); if (j[p] == '"') { size_t e = p + 1; std::string o; while (e < j.size() && j[e] != '"') { if (j[e] == '\\' && e + 1 < j.size()) { e++; } o += j[e]; e++; } return o; } size_t e = j.find_first_of(",}", p); return j.substr(p, e - p); }
 static void onOpenLog(GtkButton*, gpointer) { std::string d = tlDataDir(); gchar* argv[] = {(gchar*)"xdg-open", (gchar*)d.c_str(), nullptr}; g_spawn_async(nullptr, argv, nullptr, (GSpawnFlags)G_SPAWN_SEARCH_PATH, nullptr, nullptr, nullptr, nullptr); }
-static void onClearLog(GtkButton*, gpointer) { ::remove((tlDataDir() + "/typing-log.jsonl").c_str()); ::remove((tlDataDir() + "/typing-log.1.jsonl").c_str()); for (auto& k : prefs::keys()) if (k.rfind("TLStat_", 0) == 0) prefs::remove(k.c_str()); }
+// cleared here (the engine may not be running) and by the engine, which keeps counters and log lines in memory
+static void onClearLog(GtkButton*, gpointer) { ::remove((tlDataDir() + "/typing-log.jsonl").c_str()); ::remove((tlDataDir() + "/typing-log.1.jsonl").c_str()); prefs::clearStats(); prefs::sendCommand("clear-log"); }
 
 static void buildLog(GtkApplication* app) {
     GtkWidget* win = adw_application_window_new(app); gtk_window_set_title(GTK_WINDOW(win), "Nhật ký gõ"); gtk_window_set_default_size(GTK_WINDOW(win), 720, 720);

@@ -59,6 +59,7 @@ void sendCommand(const std::string& cmd) { mkdirp(configDir()); std::string tmp 
 static bool saveStats() { mkdirp(dataDir()); return saveMap(_st, statsPath()); }
 // a counter goes up on every word typed: written by flushStats() on the engine's flush timer, not in the key callback
 static bool _statsDirty = false;
+void clearStats() { std::lock_guard<std::mutex> g(_m); if (!_loaded) load(); _st.clear(); _statsDirty = !saveStats(); }
 void flushStats() { std::lock_guard<std::mutex> g(_m); if (_statsDirty && saveStats()) _statsDirty = false; }   // a failed write is retried on the next flush
 /// Before changing a key: re-read the file, so another writer's keys survive.
 static std::map<std::string, std::string>& mapFor(const char* key, bool forWrite) { if (isStat(key)) return _st; if (forWrite) loadInto(_v, settingsPath()); return _v; }

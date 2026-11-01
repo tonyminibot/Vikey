@@ -148,6 +148,10 @@ void command(const std::string& line) {
         int lang = line.find(" vi") != std::string::npos ? 1 : 0; bool user = line.find("user") != std::string::npos;
         if (user) setLanguageByUser(lang); else setLanguageQuiet(lang);
         if (vTypingLogEnabled) TLWrite(std::string("\"e\":\"cmd\",\"line\":\"") + jsonEscape(line) + "\",\"as\":" + std::to_string(vAutoSwitchByTyping) + ",\"pref\":" + std::to_string(prefs::getInt("AutoSwitchByTyping", 1)) + ",\"paused\":" + (AutoSwitchPaused() ? "true" : "false") + ",\"lang\":" + std::to_string(vLanguage));
+    } else if (line == "clear-log") {
+        // the settings app's Clear: the engine holds the counters (and the log lines not written yet) in memory, so
+        // it clears them itself, or its next flush would write them back over the cleared files
+        _tlWordLen = 0; clearTypingLog(); prefs::clearStats();
     }
 }
 void reloadSettings() {
