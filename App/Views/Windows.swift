@@ -5,6 +5,7 @@ import SwiftUI
 @MainActor
 final class HostedWindow<Content: View> {
     private var window: NSWindow?
+    private var host: NSHostingController<AnyView>?
     private let title: String
     private let size: NSSize?
     private let resizable: Bool
@@ -21,8 +22,9 @@ final class HostedWindow<Content: View> {
 
     func show() {
         if window == nil {
-            let host = NSHostingController(rootView: content().environmentObject(AppState.shared))
+            let host = NSHostingController(rootView: AnyView(content().environmentObject(AppState.shared)))
             host.sizingOptions = []   // size is set once below; live content-size tracking loops in AppKit's constraint pass
+            self.host = host
             let w = NSWindow(contentViewController: host)
             w.title = title
             w.styleMask = resizable ? [.titled, .closable, .miniaturizable, .resizable] : [.titled, .closable, .miniaturizable]
@@ -31,22 +33,26 @@ final class HostedWindow<Content: View> {
                 w.titleVisibility = .hidden
                 w.titlebarAppearsTransparent = true
             }
-            host.view.layoutSubtreeIfNeeded()   // the real SwiftUI size before centering (Tony: open in the middle of the screen)
-            w.setContentSize(size ?? host.view.fittingSize)
+            let targetWidth = size?.width ?? 460
+            let fit = host.sizeThatFits(in: NSSize(width: targetWidth, height: CGFloat.greatestFiniteMagnitude))
+            let initialSize = size ?? NSSize(width: targetWidth, height: max(fit.height, 460))
+            w.setContentSize(initialSize)
             window = w
             Self.centerExactly(w)
         }
         let first = window?.isVisible == false && !centered
         WindowFocus.bringForward()
         window?.makeKeyAndOrderFront(nil)
-        if first, let w = window {
+        if first, let w = window, let host = self.host {
             // SwiftUI settles the content size after the window is on screen; measure and center again then
             // (Tony: the main window still opened off-center)
             centered = true
             DispatchQueue.main.async { [size] in
-                if size == nil, let v = w.contentViewController?.view {
-                    v.layoutSubtreeIfNeeded()
-                    if v.fittingSize.height > 0, abs(v.fittingSize.height - w.contentLayoutRect.height) > 1 { w.setContentSize(v.fittingSize) }
+                if size == nil {
+                    let fit = host.sizeThatFits(in: NSSize(width: 460, height: CGFloat.greatestFiniteMagnitude))
+                    if fit.height > 0, abs(fit.height - w.contentLayoutRect.height) > 1 {
+                        w.setContentSize(fit)
+                    }
                 }
                 w.centerExactly()
             }
@@ -56,15 +62,16 @@ final class HostedWindow<Content: View> {
 
     /// After the content changed height (a card of the main window folded): resize, keeping the top edge in place.
     func fitToContent() {
-        guard let w = window, let v = w.contentViewController?.view else { return }
-        v.layoutSubtreeIfNeeded()
-        let h = v.fittingSize.height
+        guard let w = window, let host = self.host else { return }
+        let targetWidth = size?.width ?? (w.contentLayoutRect.width > 0 ? w.contentLayoutRect.width : 460)
+        let fit = host.sizeThatFits(in: NSSize(width: targetWidth, height: CGFloat.greatestFiniteMagnitude))
+        let h = fit.height
         guard h > 0, abs(h - w.contentLayoutRect.height) > 1 else { return }
-        let content = NSRect(x: 0, y: 0, width: w.contentLayoutRect.width, height: h)
+        let content = NSRect(x: 0, y: 0, width: targetWidth, height: h)
         var frame = w.frame
-        let size = w.frameRect(forContentRect: content).size
-        frame.origin.y += frame.height - size.height
-        frame.size = size
+        let newSize = w.frameRect(forContentRect: content).size
+        frame.origin.y += frame.height - newSize.height
+        frame.size = newSize
         w.setFrame(frame, display: true, animate: true)
     }
 
