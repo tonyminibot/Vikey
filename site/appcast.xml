@@ -4,18 +4,16 @@
 <title>Vikey</title>
 <link>https://vikey.app</link>
 <item>
-<title>Vikey 1.0.29</title>
-<pubDate>Sun, 01 Nov 2026 02:42:13 +0000</pubDate>
-<sparkle:version>31</sparkle:version>
-<sparkle:shortVersionString>1.0.29</sparkle:shortVersionString>
+<title>Vikey 1.0.30</title>
+<pubDate>Sun, 01 Nov 2026 05:42:12 +0000</pubDate>
+<sparkle:version>32</sparkle:version>
+<sparkle:shortVersionString>1.0.30</sparkle:shortVersionString>
 <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
 <description><![CDATA[<ul>
-<li>Chọn kiểu gõ: Telex, Telex đơn giản 1 hoặc Telex đơn giản 2 (mục Gõ tiếng Việt).</li>
-<li>Ứng dụng loại trừ (bản Mac): trong các ứng dụng bạn chọn, Vikey không động vào phím gõ. Danh sách có sẵn các ứng dụng điều khiển máy từ xa như Jump Desktop, TeamViewer, AnyDesk.</li>
-<li>Bật hoặc tắt tự chuyển cho từng ứng dụng, ngay trên thanh menu (bản Mac).</li>
-<li>Gõ một từ, dấu câu, Xoá rồi gõ tiếp: không còn mất từ phía trước ("vieejt." Xoá "nam").</li>
+<li>Cửa sổ chính chia thành các thẻ: Chung, Tự chuyển, Gõ tiếng Việt, Emoji, Loại trừ (bản Mac).</li>
+<li>Ứng dụng loại trừ chỉ hiện các ứng dụng có trên máy. Thêm ứng dụng bằng một nút duy nhất.</li>
 </ul>]]></description>
-<enclosure url="https://vikey.app/downloads/Vikey-1.0.29.dmg" type="application/octet-stream" sparkle:edSignature="bEU/JS5o9Efg/fR9cbXtCJ+k+Z/iVlHBE/fHaGJ+GXMs8PJtQ0eelF+ScAE59gitEPswdjdfmHHnKm+IP7haBA==" length="4625742"/>
+<enclosure url="https://vikey.app/downloads/Vikey-1.0.30.dmg" type="application/octet-stream" sparkle:edSignature="ktjXkwS7EBZMmJgEAqldYpqx1/RtmnjyhJx/fH1C/cON/5y4AmGI5GenwYWjfXK6K4xaX8yXKcfWFia6GXesBQ==" length="4614899"/>
 </item>
 <item>
 <title>Vikey 1.0.28 for Windows (x64)</title>
