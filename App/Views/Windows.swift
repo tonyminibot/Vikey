@@ -33,9 +33,10 @@ final class HostedWindow<Content: View> {
                 w.titleVisibility = .hidden
                 w.titlebarAppearsTransparent = true
             }
-            let targetWidth = size?.width ?? 460
+            let measured = host.sizeThatFits(in: NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude))
+            let targetWidth = size?.width ?? (measured.width > 0 ? measured.width : 460)
             let fit = host.sizeThatFits(in: NSSize(width: targetWidth, height: CGFloat.greatestFiniteMagnitude))
-            let initialSize = size ?? NSSize(width: targetWidth, height: max(fit.height, 460))
+            let initialSize = size ?? NSSize(width: targetWidth, height: fit.height > 0 ? fit.height : 460)
             w.setContentSize(initialSize)
             window = w
             Self.centerExactly(w)
@@ -49,8 +50,11 @@ final class HostedWindow<Content: View> {
             centered = true
             DispatchQueue.main.async { [size] in
                 if size == nil {
-                    let fit = host.sizeThatFits(in: NSSize(width: 460, height: CGFloat.greatestFiniteMagnitude))
-                    if fit.height > 0, abs(fit.height - w.contentLayoutRect.height) > 1 {
+                    let measured = host.sizeThatFits(in: NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude))
+                    let targetWidth = measured.width > 0 ? measured.width : 460
+                    let fit = host.sizeThatFits(in: NSSize(width: targetWidth, height: CGFloat.greatestFiniteMagnitude))
+                    let current = w.contentLayoutRect.size
+                    if fit.width > 0, fit.height > 0, (abs(fit.width - current.width) > 1 || abs(fit.height - current.height) > 1) {
                         w.setContentSize(fit)
                     }
                 }
@@ -63,7 +67,8 @@ final class HostedWindow<Content: View> {
     /// After the content changed height (a card of the main window folded): resize, keeping the top edge in place.
     func fitToContent() {
         guard let w = window, let host = self.host else { return }
-        let targetWidth = size?.width ?? (w.contentLayoutRect.width > 0 ? w.contentLayoutRect.width : 460)
+        let measured = host.sizeThatFits(in: NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude))
+        let targetWidth = size?.width ?? (measured.width > 0 ? measured.width : (w.contentLayoutRect.width > 0 ? w.contentLayoutRect.width : 460))
         let fit = host.sizeThatFits(in: NSSize(width: targetWidth, height: CGFloat.greatestFiniteMagnitude))
         let h = fit.height
         guard h > 0, abs(h - w.contentLayoutRect.height) > 1 else { return }
