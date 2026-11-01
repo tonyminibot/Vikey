@@ -403,12 +403,12 @@ void insertKey(const Uint16& keyCode, const bool& isCaps, const bool& isCheckSpe
  *  (letter, then its vowel key, the tone key last). After Backspace took a letter that was made from several keys
  *  ("có" ⌫ took o and s), the key list still had some of them, so the next key worked on a word that wasn't there
  *  ("có" ⌫ o gave "coo", D50). */
-static void asResyncStates() {
+static bool asResyncStates() {   //false: the keys couldn't be rebuilt for the whole word
     static const Uint16 toneKeys[5] = {KEY_S, KEY_F, KEY_R, KEY_X, KEY_J};
-    Uint32 tone = 0; int n = 0;
-    for (int x = 0; x < _index && n < MAX_BUFF - 3; x++) {
+    Uint32 tone = 0; int n = 0, x = 0;
+    for (; x < _index && n < MAX_BUFF - 3; x++) {
         Uint32 c = TypingWord[x];
-        if (c & CHAR_CODE_MASK) return;                    //a character the keys can't rebuild: leave the list alone
+        if (c & CHAR_CODE_MASK) return false;              //a character the keys can't rebuild: leave the list alone
         Uint32 caps = c & CAPS_MASK;
         if ((c & STANDALONE_MASK) && (c & TONEW_MASK)) { KeyStates[n++] = KEY_W | caps; }
         else {
@@ -424,6 +424,7 @@ static void asResyncStates() {
     }
     _stateIndex = n;
     _asDropN = 0;
+    return x == _index;                                    //false: the word was longer than the key list holds
 }
 
 void insertState(const Uint16& keyCode, const bool& isCaps) {
@@ -505,6 +506,10 @@ void restoreLastTypingState() {
                     TypingWord[i] = _typingStatesData[i];
                 }
                 _index = (Byte)_typingStatesData.size();
+                //the word is back after Backspace took the punctuation behind it ("việt." ⌫): its keys must come back
+                //too, or a restore at the next space put back only the keys typed since ("việt." ⌫ "nam " gave "nam")
+                _stateIndex = 0;
+                _statesLost = !asResyncStates();   //keys can't be rebuilt for the whole word: never restore it
             }
         }
     }

@@ -148,3 +148,7 @@ D53	1	the zoo 	the zoo 	0	a tie in English context stays English
 D53	1	ddi zoo ddaay 	đi zô đây 	1	the same tie in Vietnamese context is teencode
 D53	1	look 	look 	0	k only after i or ư: look never becomes lôk
 D53	1	oxy 	oxy 	0	oy only with huyền: oxy stays
+D57	1	vieejt.<nam 	vieetjnam 	1	Backspace over punctuation brings back the word with its keys: nothing typed before is lost
+D57	1	too.<b 	toob 	1	the restored word keeps its letters when the next word restores
+D57	1	vieejt.< nam 	việt nam 	1	Backspace over punctuation, then a space: the word stays
+D57	1	toottoottoottoottoottoottoottoottoot.<x 	tôttoottoottoottoottoottoottoottootx 	1	a word too long for the key list comes back as it was: never replaced by part of its keys
