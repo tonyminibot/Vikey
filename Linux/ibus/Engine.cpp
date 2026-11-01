@@ -204,7 +204,9 @@ static gboolean vikey_process_key_event(IBusEngine* engine, guint keyval, guint 
     if (purpose == IBUS_INPUT_PURPOSE_PASSWORD || purpose == IBUS_INPUT_PURPOSE_PIN) { flushPre(); return FALSE; }
     if (_appPending) { _appPending = false; std::string app = frontAppX11(); if (!app.empty() && app != core::frontApp()) core::focusChanged(app); }
     MappedKey m = engineKey(keyval);
-    if (m.key == KEY_EMPTY) { flushPre(); if (keyval < 0x100 || (keyval >= 0x1000000)) core::click(); return FALSE; }   // a key we don't model ends the word
+    // a key we don't model ends the word, including numpad digits (KP_1) and symbols like EuroSign: they type a
+    // character, and the next letter must not join the word before it ("a", KP_1, "a" gave "aâ")
+    if (m.key == KEY_EMPTY) { flushPre(); core::click(); return FALSE; }
     unsigned flags = flagsOf(state);
     bool consumed = core::keyDown(m.key, m.shift || (flags & core::F_SHIFT), flags);
     updateLangProp(e);

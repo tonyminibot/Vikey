@@ -38,6 +38,12 @@ inline Uint16 engineKey(DWORD vk) {
         // keys the engine treats as word breaks (it has no code of its own for them): act like Esc
         case VK_INSERT: case VK_HOME: case VK_END: case VK_DELETE: case VK_PRIOR: case VK_NEXT:
         case VK_SNAPSHOT: case VK_PRINT: case VK_SELECT: case VK_HELP: case VK_EXECUTE: case VK_NUMLOCK: case VK_SCROLL:
+        // keys that type a character the engine doesn't model: they end the word too, otherwise the next key
+        // would join the letters before them ("a", numpad 1, "a" gave "aâ" instead of "a1a")
+        case VK_NUMPAD0: case VK_NUMPAD1: case VK_NUMPAD2: case VK_NUMPAD3: case VK_NUMPAD4:
+        case VK_NUMPAD5: case VK_NUMPAD6: case VK_NUMPAD7: case VK_NUMPAD8: case VK_NUMPAD9:
+        case VK_DECIMAL: case VK_ADD: case VK_SUBTRACT: case VK_MULTIPLY: case VK_DIVIDE: case VK_SEPARATOR: case VK_CLEAR:
+        case VK_OEM_102: case VK_OEM_8:
             return KEY_ESC;
         default: return KEY_EMPTY;
     }
