@@ -194,7 +194,10 @@ final class KeyboardView: UIView {
         addSubview(alternates); alternates.isHidden = true
         setFonts()
         refreshLabels()
+        // frames now, not at the next layout pass: a touch that comes first (a slide off ABC/123, the next tap of
+        // fast typing) found every new key at zero size and was dropped
         setNeedsLayout()
+        layoutIfNeeded()
     }
 
     override func layoutSubviews() {
@@ -449,6 +452,9 @@ final class KeyboardView: UIView {
             Diag.touches += 1
             Diag.touchStart = CACurrentMediaTime()
             Diag.delayMs = max(Diag.delayMs, (Diag.touchStart - t.timestamp) * 1000)
+            // a new touch while another is down: the earlier key is typed now (fast two-thumb typing). First, as it
+            // may change the layer (a symbol after a slide off 123 goes back to ABC): the new touch is on those keys
+            if let prev = touch, let pk = touchKey { finish(prev, on: pk) }
             guard var c = cap(at: p), var k = kind(of: c), k != .globe else { continue }
             // fat-finger: a touch near a letter's border goes to the letter most likely next in this word
             // only on a letter key: the email/web . @ / .com keys on this page are never swapped for a letter (Tony: . gave n)
@@ -456,8 +462,6 @@ final class KeyboardView: UIView {
                 let picked = ctx.prefix.lowercased().withCString { VKPickLetter(Float(p.x), Float(p.y), $0, ctx.vietnamese ? 1 : 0, letterRects, Int32(letterRects.count)) }
                 if picked != 0, let pc = letterCaps[Character(UnicodeScalar(UInt8(bitPattern: picked)))], let pk = kind(of: pc) { c = pc; k = pk }
             }
-            // a new touch while another is down: the earlier key is typed now (fast two-thumb typing)
-            if let prev = touch, let pk = touchKey { finish(prev, on: pk) }
             touch = t; touchKey = c; touchStart = p; slideFromLayer = false
             press(c, late: CACurrentMediaTime() - t.timestamp > 0.05)
             switch k {

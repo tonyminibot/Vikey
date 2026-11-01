@@ -115,7 +115,8 @@ class VikeyIME : InputMethodService(), KeyboardView.Listener, EmojiKeyboardView.
         }
         keyboard = KeyboardView(this)
         keyboard.listener = this
-        keyboard.wordContext = { wordPrefix.toString() to (driver.language == 1) }
+        // a password types exactly the key pressed: no guessing the letter from the word before it
+        keyboard.wordContext = { if (isPasswordField) null else wordPrefix.toString() to (driver.language == 1) }
         root.addView(keyboard, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, heightPx()))
         emojiView = null
         return root
