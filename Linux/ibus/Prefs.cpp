@@ -63,7 +63,12 @@ void flushStats() { std::lock_guard<std::mutex> g(_m); if (_statsDirty && saveSt
 /// Before changing a key: re-read the file, so another writer's keys survive.
 static std::map<std::string, std::string>& mapFor(const char* key, bool forWrite) { if (isStat(key)) return _st; if (forWrite) loadInto(_v, settingsPath()); return _v; }
 static void ensure() { if (!_loaded) load(); }
-void reload() { std::lock_guard<std::mutex> g(_m); load(); }
+void reload() {   // after a change from the settings app or the panel menu
+    std::lock_guard<std::mutex> g(_m);
+    _loaded = true;
+    loadInto(_v, settingsPath());
+    if (!_statsDirty) loadInto(_st, statsPath());   // counters not written yet stay until flushStats() writes them
+}
 int getInt(const char* key, int fallback) { std::lock_guard<std::mutex> g(_m); ensure(); auto& m = mapFor(key, false); auto it = m.find(key); if (it == m.end() || it->second.empty() || it->second[0] == '"') return fallback; return atoi(it->second.c_str()); }
 void setInt(const char* key, int value) { std::lock_guard<std::mutex> g(_m); ensure(); auto& m = mapFor(key, true); m[key] = std::to_string(value); if (isStat(key)) _statsDirty = true; else save(); }
 std::string getString(const char* key, const std::string& fallback) { std::lock_guard<std::mutex> g(_m); ensure(); auto& m = mapFor(key, false); auto it = m.find(key); if (it == m.end() || it->second.empty() || it->second[0] != '"') return fallback; return unjstr(it->second); }
