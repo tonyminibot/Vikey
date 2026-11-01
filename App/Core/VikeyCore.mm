@@ -29,7 +29,9 @@ static void PlaySwitchSound(int language) {
 #define VIKEY_EVENT_TAG 0x0F341991
 #define VIKEY_BUNDLE [[NSBundle mainBundle] bundleIdentifier]
 
-#define FRONT_APP [[NSWorkspace sharedWorkspace] frontmostApplication].bundleIdentifier
+// The app being typed in, asked once per key: each lookup is a round trip to the window server,
+// and one key can need it several times (KeyFrontApp, below).
+#define FRONT_APP KeyFrontApp()
 // ← or → with no modifier (macOS marks arrow keys with the Fn and numeric-pad flags, which OTHER_CONTROL_KEY counts)
 #define PLAIN_ARROW ((_keycode == KEY_LEFT || _keycode == KEY_RIGHT) && \
                      !(_flag & (kCGEventFlagMaskCommand | kCGEventFlagMaskControl | kCGEventFlagMaskAlternate | kCGEventFlagMaskShift)))
@@ -435,7 +437,28 @@ extern "C" {
     }
     
 
-    BOOL isSpotlightVisible() {
+    // Per-key memo, cleared at the start of every tap callback: the frontmost app and whether Spotlight
+    // is open don't change within one key, and each costs a window server round trip (the window list
+    // scan grows with the number of windows on screen).
+    static NSString* _keyFrontApp = nil;
+    static bool _keyFrontAppReady = false;
+    static int _keySpotlight = -1;   // -1 unknown, 0 hidden, 1 visible
+
+    static void ForgetPerKeyState() {
+        _keyFrontApp = nil;
+        _keyFrontAppReady = false;
+        _keySpotlight = -1;
+    }
+
+    NSString* KeyFrontApp() {
+        if (!_keyFrontAppReady) {
+            _keyFrontApp = [[NSWorkspace sharedWorkspace] frontmostApplication].bundleIdentifier;
+            _keyFrontAppReady = true;
+        }
+        return _keyFrontApp;
+    }
+
+    static BOOL ScanForSpotlight() {
         NSArray *windows = CFBridgingRelease(CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements,
                                                                         kCGNullWindowID));
         for (NSDictionary *window in windows) {
@@ -446,22 +469,34 @@ extern "C" {
         return false;
     }
 
+    BOOL isSpotlightVisible() {
+        if (_keySpotlight < 0) _keySpotlight = ScanForSpotlight() ? 1 : 0;
+        return _keySpotlight == 1;
+    }
+
+    // The cheap app-list checks come first, so the Spotlight scan only runs when it decides the answer.
     BOOL shouldUseRecommendWorkaround(NSString* topApp) {
         if (!vFixRecommendBrowser) return false;
-        if (isSpotlightVisible()) return false;
-        if (topApp == nil) return true;
-        return ![_recommendWorkaroundDisabledApp containsObject:topApp];
+        if (topApp != nil && [_recommendWorkaroundDisabledApp containsObject:topApp]) return false;
+        return !isSpotlightVisible();
     }
 
     BOOL shouldUseSelectionReplacement(NSString* topApp) {
-        return isSpotlightVisible() || [_recommendWorkaroundDisabledApp containsObject:topApp];
+        return [_recommendWorkaroundDisabledApp containsObject:topApp] || isSpotlightVisible();
     }
     
+    // Saved right after the current key is handled, not inside the event tap: the whole per-app and
+    // per-site table is serialized, and an auto switch mid-typing would otherwise pay for it on the key.
+    static bool _smartSwitchSavePending = false;
     void saveSmartSwitchKeyData() {
-        getSmartSwitchKeySaveData(savedSmartSwitchKeyData);
-        NSData* _data = [NSData dataWithBytes:savedSmartSwitchKeyData.data() length:savedSmartSwitchKeyData.size()];
-        NSUserDefaults *prefs = [NSUserDefaults standardUserDefaults];
-        [prefs setObject:_data forKey:@"smartSwitchKey"];
+        if (_smartSwitchSavePending) return;
+        _smartSwitchSavePending = true;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            _smartSwitchSavePending = false;
+            getSmartSwitchKeySaveData(savedSmartSwitchKeyData);
+            NSData* _data = [NSData dataWithBytes:savedSmartSwitchKeyData.data() length:savedSmartSwitchKeyData.size()];
+            [[NSUserDefaults standardUserDefaults] setObject:_data forKey:@"smartSwitchKey"];
+        });
     }
     
     void ApplySmartSwitch(void);
@@ -629,7 +664,7 @@ extern "C" {
             pData->backspaceCount++;
         }
 
-        if (shouldUseSelectionReplacement(FRONT_APP) && pData->backspaceCount > 0) {
+        if (pData->backspaceCount > 0 && shouldUseSelectionReplacement(FRONT_APP)) {
             for (_i = 0; _i < pData->backspaceCount; _i++) {
                 SendShiftAndLeftArrow();
             }
@@ -699,21 +734,28 @@ extern "C" {
         return [f stringFromDate:[NSDate date]];
     }
 
+    static bool _tlStatsDirty = false;         // counted since the last save
+
+    static void TLLoadStats() {
+        if (_tlStats) return;
+        NSDictionary* saved = [[NSUserDefaults standardUserDefaults] dictionaryForKey:@"TypingLogStats"];
+        _tlStats = [NSMutableDictionary dictionary];
+        for (NSString* day in saved) _tlStats[day] = [saved[day] mutableCopy];
+    }
+
     static void TLCount(NSString* name) {
         if (!vTypingLogEnabled) return;
-        if (!_tlStats) {
-            NSDictionary* saved = [[NSUserDefaults standardUserDefaults] dictionaryForKey:@"TypingLogStats"];
-            _tlStats = [NSMutableDictionary dictionary];
-            for (NSString* day in saved) _tlStats[day] = [saved[day] mutableCopy];
-        }
+        TLLoadStats();
         NSString* day = TLToday();
         NSMutableDictionary* d = _tlStats[day];
         if (!d) { d = [NSMutableDictionary dictionary]; _tlStats[day] = d; }
         d[name] = @([d[name] integerValue] + 1);
+        _tlStatsDirty = true;
     }
 
     void TLFlush() {
-        if (_tlStats) [[NSUserDefaults standardUserDefaults] setObject:_tlStats forKey:@"TypingLogStats"];
+        // the stats only when they changed: the 10 s timer runs whether or not anything was typed
+        if (_tlStats && _tlStatsDirty) { [[NSUserDefaults standardUserDefaults] setObject:_tlStats forKey:@"TypingLogStats"]; _tlStatsDirty = false; }
         if (_tlPending.length == 0) return;
         NSString* chunk = _tlPending;
         _tlPending = [NSMutableString new];
@@ -738,6 +780,7 @@ extern "C" {
     void TLClear() {
         _tlPending = [NSMutableString new];
         _tlStats = [NSMutableDictionary dictionary];
+        _tlStatsDirty = false;
         [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"TypingLogStats"];
         NSString* path = TLLogPath();
         if (!_tlQueue) _tlQueue = dispatch_queue_create("vikey.typinglog", DISPATCH_QUEUE_SERIAL);
@@ -748,8 +791,15 @@ extern "C" {
     }
 
     NSDictionary* TLStatsSnapshot() {
-        TLCount(@"_touch"); // loads saved stats
+        TLLoadStats();
         return [_tlStats copy];
+    }
+
+    /// Runs done on the main thread once everything flushed so far is on disk (and a clear has run).
+    void TLAfterWrites(void (^done)(void)) {
+        TLFlush();
+        if (!_tlQueue) _tlQueue = dispatch_queue_create("vikey.typinglog", DISPATCH_QUEUE_SERIAL);
+        dispatch_async(_tlQueue, ^{ dispatch_async(dispatch_get_main_queue(), done); });
     }
 
     static bool TLKeysAllowed() {
@@ -1113,7 +1163,8 @@ extern "C" {
             return event;
         }
         _proxy = proxy;
-        
+        ForgetPerKeyState();
+
         _flag = CGEventGetFlags(event);
         _keycode = (CGKeyCode)CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode);
         
@@ -1252,6 +1303,7 @@ extern "C" {
     void TLClear(void);
     NSString* TLLogPath(void);
     NSDictionary* TLStatsSnapshot(void);
+    void TLAfterWrites(void (^done)(void));
     void OnFocusChanged(void);
     void RequestNewSession(void);
     void OnActiveAppChanged(void);
@@ -1412,6 +1464,7 @@ static NSTimer* _watchdog = nil;
 + (NSString*)typingLogPath { return TLLogPath(); }
 + (NSDictionary*)typingLogStats { return TLStatsSnapshot(); }
 + (void)flushTypingLog { TLFlush(); }
++ (void)flushTypingLogThen:(void (^)(void))done { TLAfterWrites(done); }
 + (void)clearTypingLog { TLClear(); }
 
 @end

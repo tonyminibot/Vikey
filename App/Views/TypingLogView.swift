@@ -40,7 +40,7 @@ struct TypingLogView: View {
         .confirmationDialog("Xoá toàn bộ nhật ký gõ?", isPresented: $confirmClear) {
             Button("Xoá", role: .destructive) {
                 VikeyCore.clearTypingLog()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { reload() }
+                reload()
             }
         } message: {
             Text("Số liệu thống kê và file log sẽ bị xoá.")
@@ -54,16 +54,19 @@ struct TypingLogView: View {
     }
 
     private func reload() {
-        VikeyCore.flushTypingLog()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+        // the log can be 20 MB: read it off the main thread, which also runs the keyboard tap
+        VikeyCore.flushTypingLogThen {
             stats = (VikeyCore.typingLogStats() as? [String: [String: Int]]) ?? [:]
-            events = LogEvent.load(from: VikeyCore.typingLogPath(), limit: 300)
+            let path = VikeyCore.typingLogPath()
+            DispatchQueue.global(qos: .userInitiated).async {
+                let loaded = LogEvent.load(from: path, limit: 300)
+                DispatchQueue.main.async { events = loaded }
+            }
         }
     }
 
     private func reveal() {
-        VikeyCore.flushTypingLog()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+        VikeyCore.flushTypingLogThen {
             let url = URL(fileURLWithPath: VikeyCore.typingLogPath())
             if FileManager.default.fileExists(atPath: url.path) {
                 NSWorkspace.shared.activateFileViewerSelecting([url])
@@ -130,13 +133,20 @@ struct LogEvent: Identifiable {
     let time, place, title, detail: String
     let color: Color
 
+    /// The last `limit` events, reading only the end of the file (lines are a few hundred bytes).
     static func load(from path: String, limit: Int) -> [LogEvent] {
-        guard let content = try? String(contentsOfFile: path, encoding: .utf8) else { return [] }
+        guard let h = FileHandle(forReadingAtPath: path) else { return [] }
+        defer { try? h.close() }
+        let tailBytes: UInt64 = UInt64(limit) * 1024
+        guard let size = try? h.seekToEnd() else { return [] }
+        let start = size > tailBytes ? size - tailBytes : 0
+        guard (try? h.seek(toOffset: start)) != nil, let data = try? h.readToEnd() else { return [] }
+        var lines = data.split(separator: UInt8(ascii: "\n"))
+        if start > 0, !lines.isEmpty { lines.removeFirst() }   // the read began mid-line
         var out: [LogEvent] = []
-        for line in content.split(separator: "\n").reversed() {
+        for line in lines.reversed() {
             if out.count >= limit { break }
-            guard let data = line.data(using: .utf8),
-                  let d = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
+            guard let d = try? JSONSerialization.jsonObject(with: Data(line)) as? [String: Any] else { continue }
             out.append(LogEvent(id: out.count, d))
         }
         return out
