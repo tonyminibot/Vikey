@@ -89,6 +89,9 @@ extern "C" {
     CGEventRef _newEventDown, _newEventUp;
     CGKeyCode _keycode;
     CGEventFlags _flag, _lastFlag = 0, _privateFlag;
+    // a key or click came while modifiers were held: they were for it, not a modifier-only hotkey (cleared when all are up)
+    static bool _modifierChordUsed = false;
+    #define MODIFIER_FLAGS (kCGEventFlagMaskControl | kCGEventFlagMaskAlternate | kCGEventFlagMaskCommand | kCGEventFlagMaskShift)
     CGEventTapProxy _proxy;
     
     Uint16 _newCharString[MAX_UNICODE_STRING];
@@ -284,15 +287,7 @@ extern "C" {
             CFArrayRef languages = (CFArrayRef)TISGetInputSourceProperty(isource, kTISPropertyInputSourceLanguages);
             if (languages && CFArrayGetCount(languages) > 0) {
                 NSString* lang = (__bridge NSString*)(CFStringRef)CFArrayGetValueAtIndex(languages, 0);
-                // A plain Latin keyboard layout (French AZERTY, German QWERTZ, Spanish...) still types Telex:
-                // its keys are mapped back to QWERTY above. Only input methods (Japanese, Chinese, Apple's
-                // Vietnamese Telex), non-Latin layouts (Russian, Greek, Thai) and the Vietnamese layout
-                // are another language that Vikey stays out of the way of.
-                CFStringRef type = (CFStringRef)TISGetInputSourceProperty(isource, kTISPropertyInputSourceType);
-                CFBooleanRef ascii = (CFBooleanRef)TISGetInputSourceProperty(isource, kTISPropertyInputSourceIsASCIICapable);
-                bool latinLayout = type && CFEqual(type, kTISTypeKeyboardLayout) && ascii && CFBooleanGetValue(ascii) &&
-                                   ![lang hasPrefix:@"vi"];
-                _otherInputLanguage = ![lang isEqualToString:@"en"] && !latinLayout;
+                _otherInputLanguage = ![lang isLike:@"en"];
             }
             CFRelease(isource);
         }
@@ -578,17 +573,6 @@ extern "C" {
     }
 
     /// Types the engine's new characters; for a restore, also the key that triggered it.
-    // What the current key types on the active layout (0: nothing printable), set at the start of every tap callback.
-    static UniChar _keyTypedChar = 0;
-
-    /// The character the current key types, with Shift and Caps Lock. On QWERTY that's the US character of
-    /// its key code; on other layouts (AZERTY "." is Shift+";" key) the key code was mapped back to QWERTY,
-    /// so the layout's own character is used: re-typing the US character of the mapped code would give ">".
-    static Uint16 TypedCharacterOfKey() {
-        if (vPerformLayoutCompat && _keyTypedChar) return _keyTypedChar;
-        return keyCodeToCharacter(_keycode | ((_flag & kCGEventFlagMaskAlphaShift) || (_flag & kCGEventFlagMaskShift) ? CAPS_MASK : 0));
-    }
-
     void SendNewCharString() {
         UniChar text[MAX_BUFF + 2];
         int n = 0;
@@ -598,7 +582,7 @@ extern "C" {
         }
         bool sendControlKey = false;
         if (pData->code == vRestore || pData->code == vRestoreAndStartNewSession) {
-            Uint16 ch = TypedCharacterOfKey();
+            Uint16 ch = keyCodeToCharacter(_keycode | ((_flag & kCGEventFlagMaskAlphaShift) || (_flag & kCGEventFlagMaskShift) ? CAPS_MASK : 0));
             if (ch != 0) text[n++] = ch; else sendControlKey = true;   // Return, Tab...: send the real key after the text
         }
         if (pData->code == vRestoreAndStartNewSession) startNewSession();
@@ -918,7 +902,7 @@ extern "C" {
         if (vAutoSwitchUndoCount <= 0 || correctedCount <= 0) return;
         // only a fix of the last word is undone; one that also fixed earlier words stays (Backspace just deletes)
         for (int x = 0; x < vAutoSwitchUndoCount; x++) if ((vAutoSwitchUndoData[x] & 0xFFFF) == KEY_SPACE && !(vAutoSwitchUndoData[x] & CHAR_CODE_MASK)) return;
-        Uint16 breakChar = TypedCharacterOfKey();
+        Uint16 breakChar = keyCodeToCharacter(_keycode | ((_flag & kCGEventFlagMaskAlphaShift) || (_flag & kCGEventFlagMaskShift) ? CAPS_MASK : 0));
         if (breakChar == 0) return; // Enter and the like have already acted
         int n = 0;
         for (int x = 0; x < vAutoSwitchUndoCount && n < MAX_BUFF; x++) {
@@ -1138,15 +1122,10 @@ extern "C" {
         
         _flag = CGEventGetFlags(event);
         _keycode = (CGKeyCode)CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode);
-        _keyTypedChar = 0;
         
         if (type == kCGEventKeyDown && vPerformLayoutCompat) {
             // If conversion fail, use current keycode
            _keycode = ConvertEventToKeyboadLayoutCompatKeyCode(event, _keycode);
-            UniChar typed[4]; UniCharCount typedCount = 0;
-            CGEventKeyboardGetUnicodeString(event, 4, &typedCount, typed);
-            // only a printable character stands for the key (Return, Tab, arrows keep their key code)
-            if (typedCount == 1 && typed[0] >= 0x20 && typed[0] != 0x7F && (typed[0] < 0xF700 || typed[0] > 0xF8FF)) _keyTypedChar = typed[0];
         }
         
         // emoji picker hotkey: a key with exactly these modifiers
@@ -1162,6 +1141,7 @@ extern "C" {
         if (type == kCGEventKeyDown) {
             if (GET_SWITCH_KEY(vSwitchKeyStatus) != _keycode) {
                 _lastFlag = 0;
+                if (_flag & MODIFIER_FLAGS) _modifierChordUsed = true;   // ⌃⇧K: releasing ⌃⇧ afterwards isn't the hotkey
             } else {
                 if (GET_SWITCH_KEY(vSwitchKeyStatus) == _keycode && checkHotKey(vSwitchKeyStatus, _flag, GET_SWITCH_KEY(vSwitchKeyStatus) != 0xFE)){
                     switchLanguage();
@@ -1171,6 +1151,15 @@ extern "C" {
                 }
             }
             _hasJustUsedHotKey = _lastFlag != 0;
+        } else if (type == kCGEventLeftMouseDown || type == kCGEventRightMouseDown) {
+            // ⌃⇧-click or drag: the modifiers were for the click, so releasing them isn't the ⌃⇧ hotkey
+            _lastFlag = 0;
+            if (_flag & MODIFIER_FLAGS) _modifierChordUsed = true;
+        } else if (type == kCGEventFlagsChanged && _modifierChordUsed) {
+            // the modifiers held went with a click or another key: no modifier-only hotkey until all are released
+            // (⌃⌥⇧-click, then letting go of ⌥ and ⇧ one by one, must not switch)
+            _lastFlag = 0;
+            if (!(_flag & MODIFIER_FLAGS)) _modifierChordUsed = false;
         } else if (type == kCGEventFlagsChanged) {
             if (_lastFlag == 0 || _lastFlag < _flag) {
                 _lastFlag = _flag;
@@ -1197,8 +1186,6 @@ extern "C" {
         if (type == kCGEventKeyDown && _keycode == KEY_DELETE && _autoFixUndo.active && !(OTHER_CONTROL_KEY)) {
             if (UndoAutoFixWithBackspace()) return NULL;
         }
-        // ⌃⇧-click or drag: the modifiers were for the click, so releasing them isn't the ⌃⇧ hotkey
-        if (type == kCGEventLeftMouseDown || type == kCGEventRightMouseDown) _lastFlag = 0;
         if (type == kCGEventKeyDown || type == kCGEventLeftMouseDown || type == kCGEventRightMouseDown) {
             _autoFixUndo.active = false;
             if (type == kCGEventKeyDown) TLNoteKey(_keycode, _flag); else TLNoteClick();
