@@ -52,6 +52,7 @@ static std::string TLTime() { struct timeval tv; gettimeofday(&tv, nullptr); str
 static std::string TLToday() { time_t n = time(nullptr); struct tm t; localtime_r(&n, &t); char b[16]; strftime(b, sizeof b, "%Y-%m-%d", &t); return b; }
 static void TLCount(const char* name) { if (!vTypingLogEnabled) return; std::string key = "TLStat_" + TLToday() + "_" + name; prefs::setInt(key.c_str(), prefs::getInt(key.c_str(), 0) + 1); }
 void flushTypingLog() {
+    prefs::flushStats();
     std::string chunk; { std::lock_guard<std::mutex> g(_tlMutex); chunk.swap(_tlPending); }
     if (chunk.empty()) return;
     std::string path = typingLogPath(); mkdir(prefs::dataDir().c_str(), 0700);
