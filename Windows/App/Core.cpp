@@ -547,7 +547,10 @@ static LRESULT CALLBACK keyboardHook(int nCode, WPARAM wParam, LPARAM lParam) {
         else PostMessageW(vEmojiWindow, WM_APP + 10, k->vkCode, (LPARAM)_flag);
         return 1;
     }
-    if (_keycode == KEY_EMPTY) return CallNextHookEx(_kbHook, nCode, wParam, lParam);   // F-keys, media keys...
+    if (_keycode == KEY_EMPTY) {   // F-keys, media keys...: not ours. A key typing a character still ends the word.
+        if (typesUnmodeledCharacter(k->vkCode)) resetTyping();
+        return CallNextHookEx(_kbHook, nCode, wParam, lParam);
+    }
 
     // switch language hotkey
     if (GET_SWITCH_KEY(vSwitchKeyStatus) != _keycode) _lastFlag = 0;
