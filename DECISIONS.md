@@ -5,6 +5,23 @@ Each entry records what was asked, what was decided, and its status. Newest firs
 
 Status values: **Shipped** (in a build Tony has), **Agreed** (decided, not built yet), **Rejected**.
 
+## 58. VNI input method
+
+**Status:** Agreed (2026-11-01), asked by users.
+
+**Problem.** Vikey previously only supported Telex styles (Telex, Simple Telex 1, Simple Telex 2). Many users in southern Vietnam, office environments, and accountants prefer the VNI input method using number keys.
+
+**Decision.** Support VNI input method (`vTelexStyle == 3`):
+- Tone marks: 1 (sắc), 2 (huyền), 3 (hỏi), 4 (ngã), 5 (nặng).
+- Circumflex / Horn / Breve: 6 (â, ê, ô), 7 (ơ, ư), 8 (ă).
+- Consonant bar: 9 (đ).
+- Remove tone: 0.
+- When holding Shift, numbers type punctuation/symbols as usual (`!@#$%^&*()`).
+
+Test cases: `Tools/autoswitch/rules/vni.tsv` verified in `check.sh`.
+
+---
+
 ## 57. Backspace over punctuation lost the word before it
 
 **Status:** Agreed (2026-11-01): a bug fix, in PR #33.

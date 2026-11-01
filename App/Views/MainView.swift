@@ -122,8 +122,9 @@ struct MainView: View {
                     Text("Telex").tag(0)
                     Text("Telex đơn giản 1").tag(1)
                     Text("Telex đơn giản 2").tag(2)
+                    Text("VNI").tag(3)
                 } label: {
-                    Tip("Kiểu gõ", "Telex: [ ra ơ, ] ra ư, w ra ư. Telex đơn giản 1: [ ] là dấu ngoặc, w đứng riêng vẫn là w. Telex đơn giản 2: [ ] là dấu ngoặc, w vẫn ra ư. Cả ba kiểu đều gõ uw, ow, aw ra ư, ơ, ă.")
+                    Tip("Kiểu gõ", "Telex: [ ra ơ, ] ra ư, w ra ư. Telex đơn giản 1: [ ] là dấu ngoặc, w đứng riêng vẫn là w. Telex đơn giản 2: [ ] là dấu ngoặc, w vẫn ra ư. VNI: bỏ dấu bằng số 1-9 (1: sắc, 2: huyền, 3: hỏi, 4: ngã, 5: nặng, 6: â/ê/ô, 7: ơ/ư, 8: ă, 9: đ, 0: xóa dấu).")
                 }
                 Picker(selection: Binding(get: { modern }, set: { modern = $0; Preferences.apply() })) {
                     Text("hoà, thuý").tag(1)

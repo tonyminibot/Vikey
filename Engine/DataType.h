@@ -116,12 +116,13 @@ struct vKeyHookState {
 #define IS_CONSONANT(keyCode) !(keyCode == KEY_A || keyCode == KEY_E || keyCode == KEY_U || keyCode == KEY_Y || keyCode == KEY_I || keyCode == KEY_O)
 //#define IS_MARK_KEY(keyCode) (keyCode == KEY_S || keyCode == KEY_F || keyCode == KEY_R || keyCode == KEY_J || keyCode == KEY_X)
 #define CHR(index) (Uint16)TypingWord[index]
-//[ and ] are ơ / ư only in Telex; the Simple Telex styles type them as brackets (vTelexStyle, D56)
+//[ and ] are ơ / ư only in Telex; the Simple Telex styles type them as brackets (vTelexStyle, D56); in VNI numbers 0-9 are special (D58)
 #define IS_SPECIALKEY(keyCode) \
+        (vTelexStyle == 3 ? (IS_NUMBER_KEY(keyCode)) : \
         (keyCode == KEY_W || keyCode == KEY_E || keyCode == KEY_R || keyCode == KEY_O || \
          ((keyCode == KEY_LEFT_BRACKET || keyCode == KEY_RIGHT_BRACKET) && vTelexStyle == 0) || \
          keyCode == KEY_A || keyCode == KEY_S || keyCode == KEY_D || keyCode == KEY_F || keyCode == KEY_J || \
-         keyCode == KEY_Z || keyCode == KEY_X)
+         keyCode == KEY_Z || keyCode == KEY_X))
 
 
 #define IS_NUMBER_KEY(code) (code == KEY_1 || code == KEY_2 || code == KEY_3 || code == KEY_4 || code == KEY_5 || code == KEY_6 || code == KEY_7 || code == KEY_8 || code == KEY_9 || code == KEY_0)

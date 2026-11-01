@@ -1,0 +1,20 @@
+# VNI input method (VIKEY_TELEX_STYLE=3, D58): numbers 1-9 and 0 for marks.
+# rule	start(1=VN,0=EN)	keys ('<'=Backspace, '|'=Enter)	expected text	final lang	why
+D58	1	toan1 	toán 	1	1 is sac
+D58	1	toan2 	toàn 	1	2 is huyen
+D58	1	toan3 	toản 	1	3 is hoi
+D58	1	toan4 	toãn 	1	4 is nga
+D58	1	toan5 	toạn 	1	5 is nang
+D58	1	a6 	â 	1	6 is circumflex on a
+D58	1	e6 	ê 	1	6 is circumflex on e
+D58	1	o6 	ô 	1	6 is circumflex on o
+D58	1	o7 	ơ 	1	7 is horn on o
+D58	1	u7 	ư 	1	7 is horn on u
+D58	1	a8 	ă 	1	8 is breve on a
+D58	1	d9 	đ 	1	9 is d with bar
+D58	1	toan10 	toan 	1	0 removes tone
+D58	1	viet65 	việt 	1	viet65 makes việt
+D58	1	duong72 	dường 	1	duong72 makes dường (plain d)
+D58	1	d9uong72 	đường 	1	d9uong72 makes đường (d with bar)
+D58	1	tie6ng1 	tiếng 	1	tie6ng1 makes tiếng
+D58	1	ngu7o7i2 	người 	1	ngu7o7i2 makes người

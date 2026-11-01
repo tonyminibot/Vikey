@@ -115,7 +115,7 @@ struct OnboardingView: View {
     private var welcome: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Vikey dùng kiểu gõ Telex").font(.title2.weight(.semibold))
-            Text("Vikey chỉ hỗ trợ Telex, kiểu gõ phổ biến nhất. Bạn gõ tiếng Anh bình thường, Vikey tự nhận ra và không bỏ dấu nhầm.")
+            Text("Vikey hỗ trợ Telex (mặc định) và VNI (chọn trong Cài đặt). Bạn gõ tiếng Anh bình thường, Vikey tự nhận ra và không bỏ dấu nhầm.")
                 .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 8) {
                 GridRow { telex("aa", "â"); telex("aw", "ă"); telex("ee", "ê"); telex("oo", "ô") }

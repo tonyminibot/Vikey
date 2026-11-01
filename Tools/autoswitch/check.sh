@@ -12,6 +12,7 @@ rc=0
 env -u VIKEY_TELEX_STYLE python3 rules/run_rules.py || rc=1   # the default style (Telex), whatever the shell has
 VIKEY_TELEX_STYLE=1 python3 rules/run_rules.py telex_simple1.tsv || rc=1   # D56 Simple Telex styles
 VIKEY_TELEX_STYLE=2 python3 rules/run_rules.py telex_simple2.tsv || rc=1
+VIKEY_TELEX_STYLE=3 python3 rules/run_rules.py vni.tsv || rc=1   # D58 VNI typing method
 python3 rules/run_reported.py || rc=1   # every engine bug Tony reported, as typed (rules/reported.tsv)
 python3 rules/golden.py ${1:-check} || rc=1
 

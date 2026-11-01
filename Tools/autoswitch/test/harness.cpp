@@ -24,7 +24,9 @@ static Uint16 keyOf(char c) {
         case 'p': return KEY_P; case 'q': return KEY_Q; case 'r': return KEY_R; case 's': return KEY_S; case 't': return KEY_T;
         case 'u': return KEY_U; case 'v': return KEY_V; case 'w': return KEY_W; case 'x': return KEY_X; case 'y': return KEY_Y;
         case 'z': return KEY_Z; case ' ': return KEY_SPACE; case ',': return KEY_COMMA; case '.': return KEY_DOT;
-        case '\n': return KEY_RETURN; case '<': return KEY_DELETE; case '_': return KEY_MINUS; case '-': return KEY_MINUS; case '/': return KEY_SLASH; case '1': return KEY_1; case '2': return KEY_2;
+        case '\n': return KEY_RETURN; case '<': return KEY_DELETE; case '_': return KEY_MINUS; case '-': return KEY_MINUS; case '/': return KEY_SLASH;
+        case '0': return KEY_0; case '1': return KEY_1; case '2': return KEY_2; case '3': return KEY_3; case '4': return KEY_4;
+        case '5': return KEY_5; case '6': return KEY_6; case '7': return KEY_7; case '8': return KEY_8; case '9': return KEY_9;
         case '\'': return KEY_QUOTE; case '"': return KEY_QUOTE; case ')': return KEY_0; case '(': return KEY_9; case '[': return KEY_LEFT_BRACKET; case ']': return KEY_RIGHT_BRACKET; case ';': return KEY_SEMICOLON; case '?': return KEY_SLASH;
     }
     return 0xFFFF;

@@ -34,17 +34,18 @@ static vector<Uint8> _breakCode = {
 //Telex keys: tones s f r x j, doubled a o e (circumflex), w (horn/breve), d (đ), z (remove tone)
 static const Uint16 TelexKey[11] = {KEY_S, KEY_F, KEY_R, KEY_X, KEY_J, KEY_A, KEY_O, KEY_E, KEY_W, KEY_D, KEY_Z};
 
-#define IS_KEY_Z(key) (TelexKey[10] == key)
-#define IS_KEY_D(key) (TelexKey[9] == key)
-#define IS_KEY_W(key) (TelexKey[8] == key)
-#define IS_KEY_DOUBLE(key) (TelexKey[5] == key || TelexKey[6] == key || TelexKey[7] == key)
-#define IS_KEY_S(key) (TelexKey[0] == key)
-#define IS_KEY_F(key) (TelexKey[1] == key)
-#define IS_KEY_R(key) (TelexKey[2] == key)
-#define IS_KEY_X(key) (TelexKey[3] == key)
-#define IS_KEY_J(key) (TelexKey[4] == key)
+#define IS_KEY_Z(key) (vTelexStyle == 3 ? (key == KEY_0) : (TelexKey[10] == key))
+#define IS_KEY_D(key) (vTelexStyle == 3 ? (key == KEY_9) : (TelexKey[9] == key))
+#define IS_KEY_W(key) (vTelexStyle == 3 ? (key == KEY_7 || key == KEY_8) : (TelexKey[8] == key))
+#define IS_KEY_DOUBLE(key) (vTelexStyle == 3 ? (key == KEY_6) : (TelexKey[5] == key || TelexKey[6] == key || TelexKey[7] == key))
+#define IS_KEY_S(key) (vTelexStyle == 3 ? (key == KEY_1) : (TelexKey[0] == key))
+#define IS_KEY_F(key) (vTelexStyle == 3 ? (key == KEY_2) : (TelexKey[1] == key))
+#define IS_KEY_R(key) (vTelexStyle == 3 ? (key == KEY_3) : (TelexKey[2] == key))
+#define IS_KEY_X(key) (vTelexStyle == 3 ? (key == KEY_4) : (TelexKey[3] == key))
+#define IS_KEY_J(key) (vTelexStyle == 3 ? (key == KEY_5) : (TelexKey[4] == key))
 
-#define IS_MARK_KEY(keyCode) (keyCode == KEY_S || keyCode == KEY_F || keyCode == KEY_R || keyCode == KEY_J || keyCode == KEY_X)
+#define IS_MARK_KEY(keyCode) (vTelexStyle == 3 ? (keyCode == KEY_1 || keyCode == KEY_2 || keyCode == KEY_3 || keyCode == KEY_4 || keyCode == KEY_5) : \
+                              (keyCode == KEY_S || keyCode == KEY_F || keyCode == KEY_R || keyCode == KEY_J || keyCode == KEY_X))
 #define IS_BRACKET_KEY(key) (key == KEY_LEFT_BRACKET || key == KEY_RIGHT_BRACKET)
 
 #define VSI vowelStartIndex
@@ -1205,7 +1206,26 @@ void handleMainKey(const Uint16& data, const bool& isCaps) {
     }
     
     //check Vowel
-    keyForAEO = data;
+    if (vTelexStyle == 3) {
+        VEI = _index;
+        for (i = _index - 1; i >= 0; i--) {
+            if (CHR(i) == KEY_O || CHR(i) == KEY_A || CHR(i) == KEY_E || CHR(i) == KEY_U) {
+                VEI = i;
+                break;
+            }
+        }
+        if (data == KEY_7 && VEI < _index && (CHR(VEI) == KEY_O || CHR(VEI) == KEY_U)) {
+            keyForAEO = KEY_W;
+        } else if (data == KEY_8 && VEI < _index && CHR(VEI) == KEY_A) {
+            keyForAEO = KEY_W;
+        } else if (data == KEY_6 && VEI < _index && (CHR(VEI) == KEY_A || CHR(VEI) == KEY_E || CHR(VEI) == KEY_O)) {
+            keyForAEO = TypingWord[VEI];
+        } else {
+            keyForAEO = data;
+        }
+    } else {
+        keyForAEO = data;
+    }
     vector<vector<Uint16>>& charset = _vowel[keyForAEO];
     isCorect = false;
     isChanged = false;

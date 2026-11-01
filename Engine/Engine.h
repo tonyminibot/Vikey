@@ -145,8 +145,8 @@ void vAutoSwitchForget();
 /** Teencode spelling (D53): z/dz for d, open "ie"/"oy", k after i/ư. On (1) by default. Defined in Engine.cpp. */
 extern int vTeencode;
 
-/** Telex style (D56): 0 = Telex, 1 = Simple Telex 1 ([ and ] are brackets, a lone w stays w),
- *  2 = Simple Telex 2 ([ and ] are brackets, a lone w is still ư). uw / ow / aw work in all three. Defined in Engine.cpp. */
+/** Typing style (D56, D58): 0 = Telex, 1 = Simple Telex 1 ([ and ] are brackets, a lone w stays w),
+ *  2 = Simple Telex 2 ([ and ] are brackets, a lone w is still ư), 3 = VNI (numbers 1-9 and 0). Defined in Engine.cpp. */
 extern int vTelexStyle;
 
 /**
