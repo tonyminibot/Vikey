@@ -47,13 +47,14 @@ inline Uint16 engineKey(DWORD vk) {
     }
 }
 
-/// Keys that type a character the engine has no code for (numpad operators, the ISO key next to left Shift...).
-/// The engine never sees them, so the hook ends the word on them: otherwise the next letter would join the
-/// letters typed before ("a", numpad +, "a" gave "aâ"). Not mapped to KEY_ESC, which hotkeys can use.
-inline bool typesUnmodeledCharacter(DWORD vk) {
+/// Keys the engine has no code for that still end the word: the ones typing a character (numpad operators, the
+/// ISO key next to left Shift...) and Clear (numpad 5 with Num Lock off). The engine never sees them, so the hook
+/// ends the word on them: otherwise the next letter would join the letters typed before ("a", numpad +, "a" gave
+/// "aâ"). Not mapped to KEY_ESC, which hotkeys can use.
+inline bool unmodeledKeyEndsWord(DWORD vk) {
     switch (vk) {
         case VK_DECIMAL: case VK_ADD: case VK_SUBTRACT: case VK_MULTIPLY: case VK_DIVIDE: case VK_SEPARATOR:
-        case VK_OEM_102: case VK_OEM_8:
+        case VK_OEM_102: case VK_OEM_8: case VK_CLEAR:
             return true;
         default: return false;
     }

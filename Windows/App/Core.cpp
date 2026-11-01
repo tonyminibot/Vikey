@@ -548,7 +548,8 @@ static LRESULT CALLBACK keyboardHook(int nCode, WPARAM wParam, LPARAM lParam) {
         return 1;
     }
     if (_keycode == KEY_EMPTY) {   // F-keys, media keys...: not ours. A key typing a character still ends the word.
-        if (typesUnmodeledCharacter(k->vkCode)) resetTyping();
+        _lastFlag = 0;   // Ctrl+Shift+F5, Ctrl+Shift+numpad +: releasing Ctrl+Shift afterwards isn't the hotkey
+        if (unmodeledKeyEndsWord(k->vkCode)) { TLEndWord("other"); resetTyping(); }
         return CallNextHookEx(_kbHook, nCode, wParam, lParam);
     }
 

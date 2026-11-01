@@ -87,7 +87,16 @@ static void outText(const std::u32string& t) {
     if (preeditMode()) { _pre += t; trimPre(); showPre(); return; }
     flushPre(); commitRaw(t);
 }
-static void outControlKey(Uint16 key, bool shift) { if (!_active) return; flushPre(); guint ks = keysymOf(key); if (!ks) return; guint st = shift ? IBUS_SHIFT_MASK : 0; ibus_engine_forward_key_event(IBUS_ENGINE(_active), ks, 0, st); ibus_engine_forward_key_event(IBUS_ENGINE(_active), ks, 0, st | IBUS_RELEASE_MASK); }
+// the key being handled: a restore re-sends the key itself, not the engine's stand-in for it (Home, End, Delete,
+// Page Up/Down are KEY_ESC to the engine: re-sending Escape left the cursor where it was)
+static guint _keyval = 0, _keyHw = 0;
+static void outControlKey(Uint16 key, bool shift) {
+    if (!_active) return;
+    flushPre();
+    guint ks = _keyval ? _keyval : keysymOf(key), hw = _keyval ? _keyHw : 0; if (!ks) return;
+    guint st = shift ? IBUS_SHIFT_MASK : 0;
+    ibus_engine_forward_key_event(IBUS_ENGINE(_active), ks, hw, st); ibus_engine_forward_key_event(IBUS_ENGINE(_active), ks, hw, st | IBUS_RELEASE_MASK);
+}
 // The switch sound (Tony picked "sparkle"): two tiny notes, rising into Vietnamese, falling into English. The same
 // files as the Mac app (App/Resources/Sounds/*.caf → Linux/sounds/*.wav), played in-process with GStreamer so the
 // sound follows the key with no process start; a system bell when GStreamer can't play them.
@@ -206,9 +215,11 @@ static gboolean vikey_process_key_event(IBusEngine* engine, guint keyval, guint 
     MappedKey m = engineKey(keyval);
     // a key we don't model: one that types a character (KP_Add, EuroSign...) ends the word, or the next letter would
     // join the word before it ("a", KP_Add, "a" gave "aâ"); F-keys and media keys don't
-    if (m.key == KEY_EMPTY) { flushPre(); gunichar ch = ibus_keyval_to_unicode(keyval); if (ch >= 0x20 && ch != 0x7F) core::click(); return FALSE; }
+    if (m.key == KEY_EMPTY) { flushPre(); if (g_unichar_isprint(ibus_keyval_to_unicode(keyval))) core::click(); return FALSE; }
     unsigned flags = flagsOf(state);
+    _keyval = keyval; _keyHw = keycode;
     bool consumed = core::keyDown(m.key, m.shift || (flags & core::F_SHIFT), flags);
+    _keyval = _keyHw = 0;
     updateLangProp(e);
     _lastOutputUs = g_get_monotonic_time();
     if (!consumed && preeditMode()) {   // the key goes to the app: in pre-edit mode, type it ourselves, after the pre-edit
