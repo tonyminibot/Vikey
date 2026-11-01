@@ -23,3 +23,8 @@ D58	1	cua7 	cưa 	1	cua7 horn targets u past a
 D58	1	chua7 	chưa 	1	chua7 horn targets u past a
 D58	1	yeu65 	yệu 	1	yeu65 makes yệu
 D58	1	a11 	a1 	0	repeated tone restores base char and switches to English
+D58	1	chua8 	chua8 	1	8 is breve: ua cannot take breve
+D58	1	hoa7 	hoa7 	1	7 is horn: oa cannot take horn
+D58	1	hoa8 	hoă 	1	8 is breve: oa takes breve on a
+D58	1	a7 	a7 	1	7 is horn: a cannot take horn
+D58	1	u8 	u8 	1	8 is breve: u cannot take breve

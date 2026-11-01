@@ -970,6 +970,12 @@ void insertW(const Uint16& data, const bool& isCaps) {
             hCode = vWillProcess;
             
             if ((CHR(VSI) == KEY_U && CHR(VSI+1) == KEY_O)) {
+                if (data == KEY_8) {
+                    tempDisableKey = true;
+                    isChanged = false;
+                    hCode = vDoNothing;
+                    return;
+                }
                 if (VSI - 2 >= 0 && TypingWord[VSI - 2] == KEY_T && TypingWord[VSI - 1] == KEY_H) {
                     TypingWord[VSI+1] |= TONEW_MASK;
                     if (VSI + 2 < _index && CHR(VSI+2) == KEY_N) {
@@ -985,9 +991,21 @@ void insertW(const Uint16& data, const bool& isCaps) {
                        (CHR(VSI) == KEY_U && CHR(VSI+1) == KEY_I) ||
                        (CHR(VSI) == KEY_U && CHR(VSI+1) == KEY_U) ||
                        (CHR(VSI) == KEY_O && CHR(VSI+1) == KEY_I)) {
+                if (data == KEY_8) {
+                    tempDisableKey = true;
+                    isChanged = false;
+                    hCode = vDoNothing;
+                    return;
+                }
                 TypingWord[VSI] |= TONEW_MASK;
             } else if ((CHR(VSI) == KEY_I && CHR(VSI+1) == KEY_O) ||
                        (CHR(VSI) == KEY_O && CHR(VSI+1) == KEY_A)) {
+                if (data == KEY_7 && CHR(VSI+1) == KEY_A) {
+                    tempDisableKey = true;
+                    isChanged = false;
+                    hCode = vDoNothing;
+                    return;
+                }
                 TypingWord[VSI+1] |= TONEW_MASK;
             } else {
                 //don't do anything
@@ -1013,8 +1031,38 @@ void insertW(const Uint16& data, const bool& isCaps) {
         hBPC++;
         switch (CHR(ii)) {
             case KEY_A:
+                if (data == KEY_7) {
+                    tempDisableKey = true;
+                    isChanged = false;
+                    hCode = vDoNothing;
+                    return;
+                }
+                if (TypingWord[ii] & TONEW_MASK) {
+                    //restore and disable temporary
+                    if (TypingWord[ii] & STANDALONE_MASK) {
+                        hCode = vWillProcess;
+                        hData[_index - 1 - ii] = TypingWord[ii];
+                    } else {
+                        hCode = vRestore;
+                        TypingWord[ii] &= ~TONEW_MASK;
+                        hData[_index - 1 - ii] = TypingWord[ii];
+                        isRestoredW = true;
+                    }
+                    tempDisableKey = true;
+                } else {
+                    TypingWord[ii] |= TONEW_MASK;
+                    TypingWord[ii] &= ~TONE_MASK;
+                    hData[_index - 1 - ii] = GET(TypingWord[ii]);
+                }
+                break;
             case KEY_U:
             case KEY_O:
+                if (data == KEY_8) {
+                    tempDisableKey = true;
+                    isChanged = false;
+                    hCode = vDoNothing;
+                    return;
+                }
                 if (TypingWord[ii] & TONEW_MASK) {
                     //restore and disable temporary
                     if (TypingWord[ii] & STANDALONE_MASK) {
@@ -1032,9 +1080,7 @@ void insertW(const Uint16& data, const bool& isCaps) {
                         TypingWord[ii] &= ~TONEW_MASK;
                         hData[_index - 1 - ii] = TypingWord[ii];
                         isRestoredW = true;
-                        //_index++;
                     }
-                    
                     tempDisableKey = true;
                 } else {
                     TypingWord[ii] |= TONEW_MASK;
@@ -1265,7 +1311,7 @@ void handleMainKey(const Uint16& data, const bool& isCaps) {
             if (IS_KEY_DOUBLE(data)) {
                 insertAOE(keyForAEO, isCaps);
             } else if (IS_KEY_W(data)) {
-                insertW(keyForAEO, isCaps);
+                insertW(data, isCaps);
             }
             break;
         }

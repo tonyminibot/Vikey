@@ -19,7 +19,7 @@ Status values: **Shipped** (in a build Tony has), **Agreed** (decided, not built
 - When holding Shift, numbers type punctuation/symbols as usual (`!@#$%^&*()`).
 - Auto switch is Telex-only; disabled when VNI is selected.
 
-Test cases: `Tools/autoswitch/rules/vni.tsv` (23 cases) verified in `check.sh`.
+Test cases: `Tools/autoswitch/rules/vni.tsv` (28 cases) verified in `check.sh`.
 
 ---
 
