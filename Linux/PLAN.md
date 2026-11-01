@@ -62,4 +62,3 @@ and Wayland, GNOME and KDE. Same `Engine/` C++ as macOS/Windows/iOS; the platfor
 - XWayland on a 2x screen: X positions are device pixels, GDK sizes are not (multiply by the surface scale); GTK rewrites WM hints and `_NET_WM_STATE` at map, so "above" is a client message to the window manager.
 - A window started by the engine has no startup id: mutter only focuses it after a `_NET_ACTIVE_WINDOW` request with source "pager".
 - `pkill -f vikey-settings` also kills the shell that runs it (its command line contains the name): use `pkill -x`.
-- `Tools/autoswitch/{driver/bench,driver/drvlazy,touch/touchsim,sim/sim0,test/h0,test/h10}` are tracked macOS binaries; a Linux build overwrites them (`git checkout -- Tools` before pulling in the VM).
