@@ -103,12 +103,14 @@ void setLaunchAtLogin(bool on) {
 /// who moved from OpenKey before Vikey had the setting get it too; a style already chosen in Vikey stays.
 static void telexStyleFromOpenKey() {
     if (has(L"MigratedTelexStyle")) return;
-    setInt(L"MigratedTelexStyle", 1);
-    if (has(L"TelexStyle")) return;
+    if (has(L"TelexStyle")) { setInt(L"MigratedTelexStyle", 1); return; }
+    // done only once OpenKey's setting was read: if it can't be read now, the next start tries again
     HKEY h; if (RegOpenKeyExW(HKEY_CURRENT_USER, L"SOFTWARE\\TuyenMai\\OpenKey", 0, KEY_READ, &h) != ERROR_SUCCESS) return;
     DWORD v = 0, size = sizeof(v), type = 0;
-    if (RegQueryValueExW(h, L"vInputType", nullptr, &type, (LPBYTE)&v, &size) == ERROR_SUCCESS && type == REG_DWORD && (v == 2 || v == 3))
-        setInt(L"TelexStyle", (int)v - 1);
+    if (RegQueryValueExW(h, L"vInputType", nullptr, &type, (LPBYTE)&v, &size) == ERROR_SUCCESS && type == REG_DWORD) {
+        if (v == 2 || v == 3) setInt(L"TelexStyle", (int)v - 1);
+        setInt(L"MigratedTelexStyle", 1);
+    }
     RegCloseKey(h);
 }
 

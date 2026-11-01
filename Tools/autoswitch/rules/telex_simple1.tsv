@@ -13,3 +13,4 @@ D56	1	W	W	1	a lone W stays W
 D56	1	zero[ 	zero[ 	0	a bracket ends the word like . or ,: an English word is put back (not zẻo[)
 D56	1	server] 	server] 	0	a closing bracket after an English word
 D56	1	2[w 	2[w 	1	after a bracket, a lone w stays w
+D56	1	baws 	bắ 	1	aw still makes ă

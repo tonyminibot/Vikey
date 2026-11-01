@@ -34,9 +34,11 @@ enum Migration {
     private static func telexStyleFromOpenKeyIfNeeded() {
         let defaults = UserDefaults.standard
         guard !defaults.bool(forKey: "MigratedTelexStyle") else { return }
-        defaults.set(true, forKey: "MigratedTelexStyle")
         let chosen = defaults.persistentDomain(forName: Bundle.main.bundleIdentifier ?? "")?[PrefKey.telexStyle] != nil
-        guard !chosen, let old = UserDefaults(suiteName: "com.tuyenmai.openkey") else { return }
-        if let t = old.object(forKey: "InputType") as? Int, t == 2 || t == 3 { defaults.set(t - 1, forKey: PrefKey.telexStyle) }
+        if chosen { defaults.set(true, forKey: "MigratedTelexStyle"); return }
+        // done only once OpenKey's setting was read: if it can't be read now, the next launch tries again
+        guard let old = UserDefaults(suiteName: "com.tuyenmai.openkey"), let t = old.object(forKey: "InputType") as? Int else { return }
+        if t == 2 || t == 3 { defaults.set(t - 1, forKey: PrefKey.telexStyle) }
+        defaults.set(true, forKey: "MigratedTelexStyle")
     }
 }
