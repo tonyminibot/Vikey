@@ -147,10 +147,15 @@ struct LogEvent: Identifiable {
         defer { try? h.close() }
         let tailBytes: UInt64 = UInt64(limit) * 1024
         guard let size = try? h.seekToEnd() else { return [] }
-        let start = size > tailBytes ? size - tailBytes : 0
-        guard (try? h.seek(toOffset: start)) != nil, let data = try? h.readToEnd() else { return [] }
-        var lines = data.split(separator: UInt8(ascii: "\n"))
-        if start > 0, !lines.isEmpty { lines.removeFirst() }   // the read began mid-line
+        // from one byte before the tail: everything up to the first newline is a partial line (or, when the tail
+        // starts right at a line, just that newline), so a whole record at the boundary is kept
+        let start = size > tailBytes ? size - tailBytes - 1 : 0
+        guard (try? h.seek(toOffset: start)) != nil, var data = try? h.readToEnd() else { return [] }
+        if start > 0 {
+            guard let nl = data.firstIndex(of: UInt8(ascii: "\n")) else { return [] }
+            data = data[(nl + 1)...]
+        }
+        let lines = data.split(separator: UInt8(ascii: "\n"))
         var out: [LogEvent] = []
         for line in lines.reversed() {
             if out.count >= limit { break }
