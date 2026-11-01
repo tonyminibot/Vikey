@@ -33,6 +33,8 @@ final class HostedWindow<Content: View> {
                 w.titleVisibility = .hidden
                 w.titlebarAppearsTransparent = true
             }
+            // Unbounded proposal measures natural content width; works because current content-sized views
+            // (MainView at 460pt, AcknowledgementsView at 520pt) declare explicit fixed frame widths.
             let measured = host.sizeThatFits(in: NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude))
             let targetWidth = size?.width ?? (measured.width > 0 ? measured.width : 460)
             let fit = host.sizeThatFits(in: NSSize(width: targetWidth, height: CGFloat.greatestFiniteMagnitude))

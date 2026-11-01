@@ -20,10 +20,6 @@ struct VikeyApp: App {
                 Divider()
                 DebugMenu()
             }
-            CommandGroup(replacing: .appSettings) {
-                Button("Cài đặt…") { Windows.main.show() }
-                    .keyboardShortcut(",")
-            }
         }
 
     }
