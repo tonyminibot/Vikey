@@ -119,13 +119,12 @@ static bool _useSpellCheckingBefore;
 void findAndCalculateVowel(const bool& forGrammar=false);
 void insertMark(const Uint32& markMask, const bool& canModifyFlag=true);
 
-static std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
-wstring utf8ToWideString(const string& str) {
-    return converter.from_bytes(str.c_str());
-}
-
-string wideStringToUtf8(const wstring& str) {
-    return converter.to_bytes(str.c_str());
+/** The vowel combinations that start with this letter (none for a consonant). find(), not [], which would add an
+ *  empty entry for every new key it is asked about. */
+static const vector<vector<Uint32>>& vowelCombinations(Uint16 key) {
+    static const vector<vector<Uint32>> none;
+    auto it = _vowelCombine.find(key);
+    return it == _vowelCombine.end() ? none : it->second;
 }
 
 void* vKeyInit() {
@@ -259,7 +258,7 @@ void checkSpelling(const bool& forceCheckVowel=false) {
             _spellingVowelOK = false;
             //check correct combined vowel
             if (k - j > 1 && forceCheckVowel) {
-                vector<vector<Uint32>>& vowelSet = _vowelCombine[CHR(j)];
+                const vector<vector<Uint32>>& vowelSet = vowelCombinations(CHR(j));
                 for (l = 0; l < vowelSet.size(); l++) {
                     _spellingFlag = false;
                     for (ii = 1; ii < vowelSet[l].size(); ii++) {
@@ -513,6 +512,11 @@ void restoreLastTypingState() {
                 //too, or a restore at the next space put back only the keys typed since ("việt." ⌫ "nam " gave "nam")
                 _stateIndex = 0;
                 _statesLost = !asResyncStates();   //keys can't be rebuilt for the whole word: never restore it
+                _asDropN = 0;
+                //and its spelling verdict: the space before it had made the strict check, which turned Telex off for
+                //the reopened word ("tien " ⌫ "e" gave "tiene")
+                tempDisableKey = false;
+                if (vCheckSpelling) checkSpelling();
             }
         }
     }
@@ -677,7 +681,7 @@ void removeMark() {
 }
 
 bool canHasEndConsonant() {
-    vector<vector<Uint32>>& vo = _vowelCombine[CHR(VSI)];
+    const vector<vector<Uint32>>& vo = vowelCombinations(CHR(VSI));
     for (ii = 0; ii < vo.size(); ii++) {
         kk = VSI;
         for (iii = 1; iii < vo[ii].size(); iii++) {
@@ -1319,7 +1323,9 @@ static AsWord _asPrev[AS_LOOKBACK_WORDS];
 static int _asPrevCount = 0;
 static Uint32 _asConverted[MAX_BUFF]; static int _asConvertedN = 0;   //the word auto switch just put in Vietnamese
 
+static void navForget();
 void vAutoSwitchForget() {
+    navForget();             //a ← → round trip from before can't bring back a word at the new place
     _asPrevCount = 0;
     _asWordStartOk = true;   //a fresh context (language switched, app changed): the next word stands on its own
     _spaceCount = 0; _specialChar.clear(); _typingStates.clear();   //and Backspace can't reopen a word from before it
@@ -1865,6 +1871,10 @@ struct AsEngineState {
     vector<Uint32> longWord, special, statesData;
     list<vector<Uint32>> typing;
     vKeyHookState hook;
+    //per-key state the next key reads: a replay between two keys must not change it (it turned the doubled-key
+    //word's capital off, so "Terrible " typed with suggestions on came out "terrible ")
+    Uint32 doubleKeys[MAX_BUFF]; int doubleCount, doubleFirst; bool doubleBoth;
+    int switchRequest; bool isCaps, afterDigit, appendedStandalone;
 };
 
 static void asSaveState(AsEngineState& st) {
@@ -1881,6 +1891,10 @@ static void asSaveState(AsEngineState& st) {
     st.statesData.swap(_typingStatesData);
     st.typing.swap(_typingStates);
     st.hook = std::move(HookState);
+    memcpy(st.doubleKeys, _asDoubleKeys, sizeof(_asDoubleKeys)); st.doubleCount = _asDoubleCount;
+    st.doubleFirst = _asDoubleFirst; st.doubleBoth = _asDoubleBoth;
+    st.switchRequest = vAutoSwitchRequest; st.isCaps = _isCaps; st.afterDigit = _afterDigit;
+    st.appendedStandalone = _appendedStandalone;
 }
 
 static void asRestoreState(AsEngineState& st) {
@@ -1897,7 +1911,31 @@ static void asRestoreState(AsEngineState& st) {
     _typingStatesData.swap(st.statesData);
     _typingStates.swap(st.typing);
     HookState = std::move(st.hook);
+    memcpy(_asDoubleKeys, st.doubleKeys, sizeof(_asDoubleKeys)); _asDoubleCount = st.doubleCount;
+    _asDoubleFirst = st.doubleFirst; _asDoubleBoth = st.doubleBoth;
+    vAutoSwitchRequest = st.switchRequest; _isCaps = st.isCaps; _afterDigit = st.afterDigit;
+    _appendedStandalone = st.appendedStandalone;
 }
+
+/** ← then → back to the same spot inside a word: the word is still the one being typed (D51). The engine keeps its
+ *  state from before the first ← and puts it back when the cursor returns, instead of starting a new word there
+ *  ("th ← → if" gave "thif"). Only plain arrows within the word count; anything else forgets it. */
+static AsEngineState* _navSaved = NULL;
+static int _navOffset = 0;      //how far left of the word's end the cursor is (≤ 0)
+static int _navPrevCount = 0;  //the look-back words (they're before the word's end, not before the cursor while away)
+static void navForget() { if (_navSaved) { delete _navSaved; _navSaved = NULL; } _navOffset = 0; }
+
+/** A word typed on a scratch session to see what it becomes, the live state put back after. Scoped: the
+ *  constructor saves and starts a new session, the destructor restores. A ← → round trip in progress is set aside
+ *  too (the scratch keys would have forgotten it, so the word was lost when the cursor came back). */
+struct AsScratch {
+    AsEngineState saved; AsEngineState* nav; int navOffset;
+    AsScratch() : nav(_navSaved), navOffset(_navOffset) {
+        _navSaved = NULL; _navOffset = 0;
+        asSaveState(saved); _spaceCount = 0; startNewSession();
+    }
+    ~AsScratch() { asRestoreState(saved); navForget(); _navSaved = nav; _navOffset = navOffset; }
+};
 
 #ifdef AS_TESTING
 //test harness only: snapshot the whole engine so a word can be tried and taken back
@@ -1910,10 +1948,7 @@ void vTestFreeState(void* p) { delete (AsEngineState*)p; }
  *  the result (AS_MISSING if it isn't a real syllable or nothing changed) and the result characters. */
 static int asReplay(const Uint32* keys, const int& count, Uint32* result, int& resultCount, bool* changed = NULL, Uint32* states = NULL) {
     resultCount = 0;
-    AsEngineState saved;
-    asSaveState(saved);
-    _spaceCount = 0;
-    startNewSession();
+    AsScratch scratch;
     for (int x = 0; x < count; x++) {
         vKeyHandleEvent(vKeyEvent::Keyboard, vKeyEventState::KeyDown, (Uint16)(keys[x] & CHAR_MASK), (keys[x] & CAPS_MASK) ? 1 : 0, false);
     }
@@ -1928,7 +1963,6 @@ static int asReplay(const Uint32* keys, const int& count, Uint32* result, int& r
             for (int x = 0; x < _index; x++) { if (states) states[x] = TypingWord[x]; result[resultCount++] = GET(TypingWord[x]); }
         }
     }
-    asRestoreState(saved);
     return vn;
 }
 
@@ -2065,14 +2099,6 @@ bool vAutoSwitchCheckEnglishWord(const Uint32* keys, const int& count) {
 }
 /*==========================================================================================================*/
 
-
-/** ← then → back to the same spot inside a word: the word is still the one being typed (D51). The engine keeps its
- *  state from before the first ← and puts it back when the cursor returns, instead of starting a new word there
- *  ("th ← → if" gave "thif"). Only plain arrows within the word count; anything else forgets it. */
-static AsEngineState* _navSaved = NULL;
-static int _navOffset = 0;      //how far left of the word's end the cursor is (≤ 0)
-static int _navPrevCount = 0;  //the look-back words (they're before the word's end, not before the cursor while away)
-static void navForget() { if (_navSaved) { delete _navSaved; _navSaved = NULL; } _navOffset = 0; }
 
 void vKeyHandleEvent(const vKeyEvent& event,
                      const vKeyEventState& state,
@@ -2446,7 +2472,7 @@ int vAutoSwitchCompletions(const int& vietnamese, const char* prefix, char out[]
     const signed char* sc = vietnamese ? kAutoSwitchVnScores : kAutoSwitchEnScores;
     int count = vietnamese ? kAutoSwitchVnCount : kAutoSwitchEnCount;
     int len = (int)strlen(prefix);
-    if (len == 0 || len >= 30) return 0;
+    if (len == 0 || len >= 30 || maxOut <= 0) return 0;
     int a, b;
     asPrefixRange(words, offsets, count, prefix, len, a, b);
     int n = 0;
@@ -2467,16 +2493,11 @@ bool vAutoSwitchIsVietnameseSpelling(const char* letters) {
     if (n == 0 || n >= AS_KEY_LEN - 1) return false;
     Uint32 keys[AS_KEY_LEN];
     for (int i = 0; i < n; i++) { keys[i] = asKeyOfLetter(letters[i]); if (!keys[i] && letters[i] != 'a') return false; }
-    AsEngineState saved;
-    asSaveState(saved);
-    _spaceCount = 0;
-    startNewSession();
+    AsScratch scratch;
     for (int x = 0; x < n; x++) vKeyHandleEvent(vKeyEvent::Keyboard, vKeyEventState::KeyDown, (Uint16)keys[x], 0, false);
     bool savedTemp = tempDisableKey;
     checkSpelling(true);
-    bool valid = !tempDisableKey && !savedTemp;
-    asRestoreState(saved);
-    return valid;
+    return !tempDisableKey && !savedTemp;
 }
 
 /** Early Switch (D28): which language a finished word can only be. 1 = only Vietnamese (a Vietnamese reading,

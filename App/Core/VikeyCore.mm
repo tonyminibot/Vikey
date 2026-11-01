@@ -989,7 +989,7 @@ extern "C" {
         bool shift = _flag & kCGEventFlagMaskShift;
         bool caps = shift || (_flag & kCGEventFlagMaskAlphaShift);
         if ((_keycode == KEY_LEFT || _keycode == KEY_RIGHT) && !shift) {   // D51: ← → round trip inside a word
-            if (_keycode == KEY_LEFT && _enNavOffset == 0 && (_enCount > 0 || _enPrevN > 0)) {
+            if (_keycode == KEY_LEFT && _enNavOffset == 0 && (_enCount > 0 || _enPrevN > 0 || _enAfterDouble)) {
                 memcpy(_enNavKeys, _enKeys, _enCount * sizeof(Uint32)); _enNavCount = _enCount; _enNavValid = _enValid;
                 _enNavAfterDouble = _enAfterDouble; _enNavPrevN = _enPrevN; _enNavOffset = -1;
                 StartEnglishWord(false); _enAfterDouble = false; _enPrevN = 0;

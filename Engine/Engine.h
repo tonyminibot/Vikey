@@ -9,8 +9,7 @@
 #ifndef Engine_h
 #define Engine_h
 
-#include <locale>
-#include <codecvt>
+#include <string>
 
 #include "DataType.h"
 #include "Vietnamese.h"
@@ -216,11 +215,5 @@ void startNewSession();
  * reset spelling value
  */
 void vSetCheckSpelling();
-
-/**
- * some utils function
- */
-wstring utf8ToWideString(const string& str);
-string wideStringToUtf8(const wstring& str);
 
 #endif /* Engine_h */

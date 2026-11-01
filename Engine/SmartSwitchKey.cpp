@@ -45,6 +45,7 @@ void getSmartSwitchKeySaveData(vector<Byte>& outData) {
     
     for (std::map<string, Int8>::iterator it = _smartSwitchKeyData.begin(); it != _smartSwitchKeyData.end(); ++it) {
         if (it->first.length() > 255) continue; //the length is one byte: a longer key ("app|host") would break every entry after it
+        if (count == 0xFFFF) break; //the count is two bytes: more entries would wrap it and the rest would be read as garbage
         outData.push_back((Byte)it->first.length());
         for (int j = 0; j < it->first.length(); j++) {
             outData.push_back(it->first[j]);

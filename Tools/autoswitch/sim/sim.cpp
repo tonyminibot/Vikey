@@ -121,7 +121,7 @@ static void press(Uint16 key, bool shift) {
     }
     // English mode (HandleEnglishKeyForAutoSwitch)
     if ((key == KEY_LEFT || key == KEY_RIGHT) && !shift) {   // D51: ← → round trip inside a word keeps the word
-        if (key == KEY_LEFT && P.navOffset == 0 && (P.enCount > 0 || P.prevN > 0)) {
+        if (key == KEY_LEFT && P.navOffset == 0 && (P.enCount > 0 || P.prevN > 0 || P.enAfterDouble)) {
             memcpy(P.navKeys, P.enKeys, sizeof(P.enKeys)); P.navCount = P.enCount; P.navValid = P.enValid;
             P.navAfterDouble = P.enAfterDouble; P.navPrevN = P.prevN; P.navOffset = -1;
             P.enCount = 0; P.enValid = false; P.enAfterDouble = false; P.prevN = 0;

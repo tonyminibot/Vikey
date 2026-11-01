@@ -5,6 +5,26 @@ Each entry records what was asked, what was decided, and its status. Newest firs
 
 Status values: **Shipped** (in a build Tony has), **Agreed** (decided, not built yet), **Rejected**.
 
+## 58. A word reopened with Backspace, and ← → after a doubled key
+
+**Status:** Agreed (2026-11-01): a bug fix, in PR #PRNUM.
+
+**Problem.** An engine audit found three ways a word lost letters or Telex:
+- A word reopened by Backspace over its space kept the strict spelling verdict from that space, so Telex keys stopped working on it: `tien ` ⌫ `e` gave `tiene`, and `viet ` ⌫ `ej` gave `vietej`.
+- In English mode right after a doubled-key switch, ← → dropped the "keep the doubled letter" state: `sorr` ← → `y ` gave `sory `.
+- The word lookups the phone keyboards run between keys (suggestions, auto-correct) left per-key state changed, so a capital typed before a doubled key was lost: `Terrible ` gave `terrible `.
+
+**Fix.** A reopened word re-checks its spelling, as if its keys had been typed straight through.
+The ← → round trip (D51) also starts right after a doubled-key switch, on every platform.
+Word lookups save and put back all the per-key state they touch.
+
+**Result.** Reopened words behave exactly like typing the same keys straight through.
+Goldens and metrics unchanged.
+The realistic-typing simulator needs one fewer fix by hand: cursor-trip 75 -> 74.
+Cases tagged D58 in `rules.tsv` (4 cases) and in `driver/undo_test.cpp` (lookups between keys).
+
+---
+
 ## 57. Backspace over punctuation lost the word before it
 
 **Status:** Agreed (2026-11-01): a bug fix, in PR #33.

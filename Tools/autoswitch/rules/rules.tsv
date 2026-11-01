@@ -155,3 +155,7 @@ D57	1	toottoottoottoottoottoottoottoottoot.<x 	tôttoottoottoottoottoottoottoott
 D56	1	[ 	ơ 	1	Telex (the default style): a lone [ is ơ
 D56	1	] 	ư 	1	Telex: a lone ] is ư
 D56	1	w 	ư 	1	Telex: a lone w is ư
+D58	1	toi ban <<<<<sk 	toisk 	0	Backspace over the space back into the previous word: restore-if-wrong keeps it (a guard; D57 fixed the keys)
+D58	1	tien <e	tiên	1	a word reopened with Backspace still takes Telex keys (the space's spelling verdict made it "tiene")
+D58	1	viet <ej	việt	1	the same with a tone after the vowel key
+D58	1	sorr{}y 	sorry 	0	← → right after a doubled-key switch keeps the doubled letter ("sorr" ← → "y" gave "sory")
