@@ -74,7 +74,7 @@ class KeyboardView(ctx: Context) : View(ctx) {
     var suggestions: List<Suggestion> = emptyList()
         set(v) { if (field != v) { field = v; invalidate() } }
     /** The letters typed so far in the current word and the mode, for the fat-finger model. */
-    var wordContext: (() -> Pair<String, Boolean>)? = null
+    var wordContext: (() -> Pair<String, Boolean>?)? = null   // null: no fat-finger guessing (password fields)
     /** Where the last typed key was touched; taken (set to null) by the controller. */
     var lastTapPoint: Pair<Float, Float>? = null
     var keyRects = KeyRects(ByteArray(0), FloatArray(0)); private set
