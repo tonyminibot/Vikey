@@ -7,7 +7,7 @@ Status values: **Shipped** (in a build Tony has), **Agreed** (decided, not built
 
 ## 58. A word reopened with Backspace, and ← → after a doubled key
 
-**Status:** Agreed (2026-11-01): a bug fix, in PR #36.
+**Status:** Proposed (2026-11-01), in PR #36: whether a word reopened with Backspace takes Telex again is the maintainer's call.
 
 **Problem.** An engine audit found three ways a word lost letters or Telex:
 - A word reopened by Backspace over its space kept the strict spelling verdict from that space, so Telex keys stopped working on it: `tien ` ⌫ `e` gave `tiene`, and `viet ` ⌫ `ej` gave `vietej`.
