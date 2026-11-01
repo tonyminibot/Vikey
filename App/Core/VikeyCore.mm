@@ -1144,6 +1144,8 @@ extern "C" {
                 if (_flag & MODIFIER_FLAGS) _modifierChordUsed = true;   // ⌃⇧K: releasing ⌃⇧ afterwards isn't the hotkey
             } else {
                 if (GET_SWITCH_KEY(vSwitchKeyStatus) == _keycode && checkHotKey(vSwitchKeyStatus, _flag, GET_SWITCH_KEY(vSwitchKeyStatus) != 0xFE)){
+                    // holding ⌥Z auto-repeats ~30 times a second: switch once per press, swallow the repeats
+                    if (CGEventGetIntegerValueField(event, kCGKeyboardEventAutorepeat)) return NULL;
                     switchLanguage();
                     _lastFlag = 0;
                     _hasJustUsedHotKey = true;
@@ -1151,8 +1153,8 @@ extern "C" {
                 }
             }
             _hasJustUsedHotKey = _lastFlag != 0;
-        } else if (type == kCGEventLeftMouseDown || type == kCGEventRightMouseDown) {
-            // ⌃⇧-click or drag: the modifiers were for the click, so releasing them isn't the ⌃⇧ hotkey
+        } else if (type == kCGEventLeftMouseDown || type == kCGEventRightMouseDown || type == kCGEventOtherMouseDown) {
+            // ⌃⇧-click (any button) or drag: the modifiers were for the click, so releasing them isn't the ⌃⇧ hotkey
             _lastFlag = 0;
             if (_flag & MODIFIER_FLAGS) _modifierChordUsed = true;
         } else if (type == kCGEventFlagsChanged && _modifierChordUsed) {
@@ -1324,7 +1326,7 @@ static NSTimer* _watchdog = nil;
     if (_eventTap) return YES;
     if (!_inited) { VikeyInit(); _inited = YES; }
     CGEventMask mask = (1 << kCGEventKeyDown) | (1 << kCGEventKeyUp) | (1 << kCGEventFlagsChanged) |
-                       (1 << kCGEventLeftMouseDown) | (1 << kCGEventRightMouseDown);
+                       (1 << kCGEventLeftMouseDown) | (1 << kCGEventRightMouseDown) | (1 << kCGEventOtherMouseDown);
     _eventTap = CGEventTapCreate(kCGSessionEventTap, kCGHeadInsertEventTap, kCGEventTapOptionDefault, mask, VikeyEventCallback, NULL);
     if (!_eventTap) return NO;
     _runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, _eventTap, 0);
