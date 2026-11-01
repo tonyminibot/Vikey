@@ -69,8 +69,9 @@ static bool TLKeysAllowed() {
 static void TLWrite(std::string fields) {
     if (!vTypingLogEnabled) return;
     std::string line = "{" + fields + ",\"t\":\"" + TLTime() + "\",\"app\":\"" + jsonEscape(_tlApp) + "\"}\n";
-    bool flush; { std::lock_guard<std::mutex> g(_tlMutex); _tlPending += line; flush = _tlPending.size() > 8192; }
-    if (flush) flushTypingLog();
+    // no file write here (this runs in the IBus key callback): the 10 s flush timer writes it, and a few seconds of
+    // typing is a few KB
+    std::lock_guard<std::mutex> g(_tlMutex); _tlPending += line;
 }
 static const char* TLLang(int lang) { return lang ? "vi" : "en"; }
 static void TLEndWord(const std::string& reason) {
