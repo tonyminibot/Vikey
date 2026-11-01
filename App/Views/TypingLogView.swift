@@ -60,9 +60,11 @@ struct TypingLogView: View {
         // reload's result is shown.
         loadGeneration += 1
         let generation = loadGeneration
+        // the stats as of the flush: a key typed while it runs isn't in the rows read, so it isn't counted either
+        let snapshot = (VikeyCore.typingLogStats() as? [String: [String: Int]]) ?? [:]
         VikeyCore.flushTypingLogThen {
             guard generation == loadGeneration else { return }
-            stats = (VikeyCore.typingLogStats() as? [String: [String: Int]]) ?? [:]
+            stats = snapshot
             let path = VikeyCore.typingLogPath()
             DispatchQueue.global(qos: .userInitiated).async {
                 let loaded = LogEvent.load(from: path, limit: 300)
