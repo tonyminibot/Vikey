@@ -4,18 +4,18 @@
 <title>Vikey</title>
 <link>https://vikey.app</link>
 <item>
-<title>Vikey 1.0.28</title>
-<pubDate>Sat, 31 Oct 2026 01:39:30 +0000</pubDate>
-<sparkle:version>30</sparkle:version>
-<sparkle:shortVersionString>1.0.28</sparkle:shortVersionString>
+<title>Vikey 1.0.29</title>
+<pubDate>Sun, 01 Nov 2026 02:42:13 +0000</pubDate>
+<sparkle:version>31</sparkle:version>
+<sparkle:shortVersionString>1.0.29</sparkle:shortVersionString>
 <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
 <description><![CDATA[<ul>
-<li>Cửa sổ chính gọn hơn: các mục Tự chuyển, Gõ tiếng Việt, Bảng emoji, Chung gập lại được. Khi gập vẫn thấy những gì đang bật (bản Mac).</li>
-<li>Gõ teencode: giữ các từ chat quen thuộc như "zui zẻ", "zậy", "gòy", "thík" thay vì trả lại phím. Từ tiếng Anh như "zero", "look" vẫn giữ nguyên. Tắt được trong mục Gõ tiếng Việt (bản Mac).</li>
-<li>Gõ "(" hoặc "." ngay sau khoảng trắng không còn sửa từ phía trước.</li>
-<li>Windows: sửa lỗi có thể làm Vikey thoát khi đóng cửa sổ cài đặt.</li>
+<li>Chọn kiểu gõ: Telex, Telex đơn giản 1 hoặc Telex đơn giản 2 (mục Gõ tiếng Việt).</li>
+<li>Ứng dụng loại trừ (bản Mac): trong các ứng dụng bạn chọn, Vikey không động vào phím gõ. Danh sách có sẵn các ứng dụng điều khiển máy từ xa như Jump Desktop, TeamViewer, AnyDesk.</li>
+<li>Bật hoặc tắt tự chuyển cho từng ứng dụng, ngay trên thanh menu (bản Mac).</li>
+<li>Gõ một từ, dấu câu, Xoá rồi gõ tiếp: không còn mất từ phía trước ("vieejt." Xoá "nam").</li>
 </ul>]]></description>
-<enclosure url="https://vikey.app/downloads/Vikey-1.0.28.dmg" type="application/octet-stream" sparkle:edSignature="1Y0tKktTg8RtiVzH33IPnh6F0xj0Sf7UaR6CW/8aduB/jJi6IfgQY5z3RrWHzZlZBkrGV8HxZfDOTqb0yhe8AQ==" length="4585036"/>
+<enclosure url="https://vikey.app/downloads/Vikey-1.0.29.dmg" type="application/octet-stream" sparkle:edSignature="bEU/JS5o9Efg/fR9cbXtCJ+k+Z/iVlHBE/fHaGJ+GXMs8PJtQ0eelF+ScAE59gitEPswdjdfmHHnKm+IP7haBA==" length="4625742"/>
 </item>
 <item>
 <title>Vikey 1.0.28 for Windows (x64)</title>
