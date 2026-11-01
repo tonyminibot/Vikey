@@ -3,6 +3,7 @@
 //  The bridge between the SwiftUI app and the keyboard core (event tap + Telex engine).
 //
 #import <Foundation/Foundation.h>
+#import <AppKit/AppKit.h>
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -48,6 +49,9 @@ extern NSNotificationName const VikeyLanguageDidChangeNotification;
 + (void)setEmojiHotkeyHandler:(void (^)(void))handler;
 /// While open, keys reach the picker untouched (no Vietnamese typing).
 + (void)setEmojiPickerOpen:(BOOL)open;
+/// The key code a hotkey recorded from this key press is stored as: on Dvorak, AZERTY... the key that types
+/// "z" is recorded as Z, the same way the event tap reads it.
++ (int)hotkeyKeyCodeForEvent:(NSEvent *)event;
 /// Forget the word being typed (the cursor moved to another field without a click).
 + (void)resetTyping;
 /// Types text into the focused app.

@@ -30,7 +30,7 @@ struct HotkeyRecorder: View {
             if event.type == .keyDown {
                 if event.keyCode == 53 && mods.isEmpty { stop(); return nil }   // Esc cancels
                 if !mods.isEmpty {
-                    raw = Hotkey(keyCode: Int(event.keyCode), modifiers: mods, beep: beep).raw
+                    raw = Hotkey(keyCode: Int(VikeyCore.hotkeyKeyCode(for: event)), modifiers: mods, beep: beep).raw
                     stop()
                 }
                 return nil

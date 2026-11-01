@@ -24,24 +24,27 @@ final class AppState: ObservableObject {
 
     /// Starts the keyboard core when Accessibility is granted; otherwise shows onboarding and waits.
     func startIfPossible() {
-        if VikeyCore.isAccessibilityTrusted(), VikeyCore.start() {
-            isRunning = true
-            needsOnboarding = false
-            language = Int(VikeyCore.language())
-            permissionTimer?.invalidate()
-            permissionTimer = nil
-            return
-        }
+        if tryStart() { return }
         isRunning = false
         needsOnboarding = true
         OnboardingWindow.show()
         if permissionTimer == nil {
+            // retries quietly: if macOS reports the permission but still refuses the tap (a stale entry after an
+            // update), showing onboarding again every second would keep stealing focus from the user's app
             permissionTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
-                Task { @MainActor in
-                    if VikeyCore.isAccessibilityTrusted() { AppState.shared.startIfPossible() }
-                }
+                Task { @MainActor in _ = AppState.shared.tryStart() }
             }
         }
+    }
+
+    private func tryStart() -> Bool {
+        guard VikeyCore.isAccessibilityTrusted(), VikeyCore.start() else { return false }
+        isRunning = true
+        needsOnboarding = false
+        language = Int(VikeyCore.language())
+        permissionTimer?.invalidate()
+        permissionTimer = nil
+        return true
     }
 
     func setLanguage(_ value: Int) {

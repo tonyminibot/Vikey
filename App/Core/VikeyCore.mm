@@ -284,7 +284,15 @@ extern "C" {
             CFArrayRef languages = (CFArrayRef)TISGetInputSourceProperty(isource, kTISPropertyInputSourceLanguages);
             if (languages && CFArrayGetCount(languages) > 0) {
                 NSString* lang = (__bridge NSString*)(CFStringRef)CFArrayGetValueAtIndex(languages, 0);
-                _otherInputLanguage = ![lang isLike:@"en"];
+                // A plain Latin keyboard layout (French AZERTY, German QWERTZ, Spanish...) still types Telex:
+                // its keys are mapped back to QWERTY above. Only input methods (Japanese, Chinese, Apple's
+                // Vietnamese Telex), non-Latin layouts (Russian, Greek, Thai) and the Vietnamese layout
+                // are another language that Vikey stays out of the way of.
+                CFStringRef type = (CFStringRef)TISGetInputSourceProperty(isource, kTISPropertyInputSourceType);
+                CFBooleanRef ascii = (CFBooleanRef)TISGetInputSourceProperty(isource, kTISPropertyInputSourceIsASCIICapable);
+                bool latinLayout = type && CFEqual(type, kTISTypeKeyboardLayout) && ascii && CFBooleanGetValue(ascii) &&
+                                   ![lang hasPrefix:@"vi"];
+                _otherInputLanguage = ![lang isEqualToString:@"en"] && !latinLayout;
             }
             CFRelease(isource);
         }
@@ -570,6 +578,17 @@ extern "C" {
     }
 
     /// Types the engine's new characters; for a restore, also the key that triggered it.
+    // What the current key types on the active layout (0: nothing printable), set at the start of every tap callback.
+    static UniChar _keyTypedChar = 0;
+
+    /// The character the current key types, with Shift and Caps Lock. On QWERTY that's the US character of
+    /// its key code; on other layouts (AZERTY "." is Shift+";" key) the key code was mapped back to QWERTY,
+    /// so the layout's own character is used: re-typing the US character of the mapped code would give ">".
+    static Uint16 TypedCharacterOfKey() {
+        if (vPerformLayoutCompat && _keyTypedChar) return _keyTypedChar;
+        return keyCodeToCharacter(_keycode | ((_flag & kCGEventFlagMaskAlphaShift) || (_flag & kCGEventFlagMaskShift) ? CAPS_MASK : 0));
+    }
+
     void SendNewCharString() {
         UniChar text[MAX_BUFF + 2];
         int n = 0;
@@ -579,7 +598,7 @@ extern "C" {
         }
         bool sendControlKey = false;
         if (pData->code == vRestore || pData->code == vRestoreAndStartNewSession) {
-            Uint16 ch = keyCodeToCharacter(_keycode | ((_flag & kCGEventFlagMaskAlphaShift) || (_flag & kCGEventFlagMaskShift) ? CAPS_MASK : 0));
+            Uint16 ch = TypedCharacterOfKey();
             if (ch != 0) text[n++] = ch; else sendControlKey = true;   // Return, Tab...: send the real key after the text
         }
         if (pData->code == vRestoreAndStartNewSession) startNewSession();
@@ -587,16 +606,19 @@ extern "C" {
         if (sendControlKey) SendKeyCode(_keycode);
     }
 
-    bool checkHotKey(int hotKeyData, bool checkKeyCode=true) {
+    /// flags: the modifiers held. For a key hotkey (⌥Z) that's the key press's own flags, so holding ⌥ and
+    /// pressing Z again (or auto-repeat) switches again instead of typing "Ω"; for modifiers alone (⌃⇧) it's
+    /// the most modifiers held before the release.
+    bool checkHotKey(int hotKeyData, CGEventFlags flags, bool checkKeyCode=true) {
         if ((hotKeyData & (~0x8000)) == EMPTY_HOTKEY)
             return false;
-        if (HAS_CONTROL(hotKeyData) ^ GET_BOOL(_lastFlag & kCGEventFlagMaskControl))
+        if (HAS_CONTROL(hotKeyData) ^ GET_BOOL(flags & kCGEventFlagMaskControl))
             return false;
-        if (HAS_OPTION(hotKeyData) ^ GET_BOOL(_lastFlag & kCGEventFlagMaskAlternate))
+        if (HAS_OPTION(hotKeyData) ^ GET_BOOL(flags & kCGEventFlagMaskAlternate))
             return false;
-        if (HAS_COMMAND(hotKeyData) ^ GET_BOOL(_lastFlag & kCGEventFlagMaskCommand))
+        if (HAS_COMMAND(hotKeyData) ^ GET_BOOL(flags & kCGEventFlagMaskCommand))
             return false;
-        if (HAS_SHIFT(hotKeyData) ^ GET_BOOL(_lastFlag & kCGEventFlagMaskShift))
+        if (HAS_SHIFT(hotKeyData) ^ GET_BOOL(flags & kCGEventFlagMaskShift))
             return false;
         if (checkKeyCode) {
             if (GET_SWITCH_KEY(hotKeyData) != _keycode)
@@ -896,7 +918,7 @@ extern "C" {
         if (vAutoSwitchUndoCount <= 0 || correctedCount <= 0) return;
         // only a fix of the last word is undone; one that also fixed earlier words stays (Backspace just deletes)
         for (int x = 0; x < vAutoSwitchUndoCount; x++) if ((vAutoSwitchUndoData[x] & 0xFFFF) == KEY_SPACE && !(vAutoSwitchUndoData[x] & CHAR_CODE_MASK)) return;
-        Uint16 breakChar = keyCodeToCharacter(_keycode | ((_flag & kCGEventFlagMaskAlphaShift) || (_flag & kCGEventFlagMaskShift) ? CAPS_MASK : 0));
+        Uint16 breakChar = TypedCharacterOfKey();
         if (breakChar == 0) return; // Enter and the like have already acted
         int n = 0;
         for (int x = 0; x < vAutoSwitchUndoCount && n < MAX_BUFF; x++) {
@@ -1116,10 +1138,15 @@ extern "C" {
         
         _flag = CGEventGetFlags(event);
         _keycode = (CGKeyCode)CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode);
+        _keyTypedChar = 0;
         
         if (type == kCGEventKeyDown && vPerformLayoutCompat) {
             // If conversion fail, use current keycode
            _keycode = ConvertEventToKeyboadLayoutCompatKeyCode(event, _keycode);
+            UniChar typed[4]; UniCharCount typedCount = 0;
+            CGEventKeyboardGetUnicodeString(event, 4, &typedCount, typed);
+            // only a printable character stands for the key (Return, Tab, arrows keep their key code)
+            if (typedCount == 1 && typed[0] >= 0x20 && typed[0] != 0x7F && (typed[0] < 0xF700 || typed[0] > 0xF8FF)) _keyTypedChar = typed[0];
         }
         
         // emoji picker hotkey: a key with exactly these modifiers
@@ -1136,7 +1163,7 @@ extern "C" {
             if (GET_SWITCH_KEY(vSwitchKeyStatus) != _keycode) {
                 _lastFlag = 0;
             } else {
-                if (GET_SWITCH_KEY(vSwitchKeyStatus) == _keycode && checkHotKey(vSwitchKeyStatus, GET_SWITCH_KEY(vSwitchKeyStatus) != 0xFE)){
+                if (GET_SWITCH_KEY(vSwitchKeyStatus) == _keycode && checkHotKey(vSwitchKeyStatus, _flag, GET_SWITCH_KEY(vSwitchKeyStatus) != 0xFE)){
                     switchLanguage();
                     _lastFlag = 0;
                     _hasJustUsedHotKey = true;
@@ -1149,7 +1176,7 @@ extern "C" {
                 _lastFlag = _flag;
             } else if (_lastFlag > _flag)  {
                 //check switch
-                if (checkHotKey(vSwitchKeyStatus, GET_SWITCH_KEY(vSwitchKeyStatus) != 0xFE)) {
+                if (checkHotKey(vSwitchKeyStatus, _lastFlag, GET_SWITCH_KEY(vSwitchKeyStatus) != 0xFE)) {
                     _lastFlag = 0;
                     switchLanguage();
                     _hasJustUsedHotKey = true;
@@ -1170,6 +1197,8 @@ extern "C" {
         if (type == kCGEventKeyDown && _keycode == KEY_DELETE && _autoFixUndo.active && !(OTHER_CONTROL_KEY)) {
             if (UndoAutoFixWithBackspace()) return NULL;
         }
+        // ⌃⇧-click or drag: the modifiers were for the click, so releasing them isn't the ⌃⇧ hotkey
+        if (type == kCGEventLeftMouseDown || type == kCGEventRightMouseDown) _lastFlag = 0;
         if (type == kCGEventKeyDown || type == kCGEventLeftMouseDown || type == kCGEventRightMouseDown) {
             _autoFixUndo.active = false;
             if (type == kCGEventKeyDown) TLNoteKey(_keycode, _flag); else TLNoteClick();
@@ -1383,6 +1412,13 @@ static NSTimer* _watchdog = nil;
 
 + (void)setEmojiHotkeyHandler:(void (^)(void))handler { vEmojiHandler = [handler copy]; }
 + (void)setEmojiPickerOpen:(BOOL)open { vEmojiOpen = open; }
+
++ (int)hotkeyKeyCodeForEvent:(NSEvent *)event {
+    // the tap matches hotkeys against the key code mapped back to QWERTY (Dvorak, AZERTY...): record the same
+    int code = event.keyCode;
+    if (vPerformLayoutCompat) code = ConvertKeyStringToKeyCode(event.charactersIgnoringModifiers, code);
+    return code;
+}
 
 + (void)resetTyping {
     ResetEnglishWord(true);
