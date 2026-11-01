@@ -27,7 +27,7 @@
 #endif
 using namespace vikey;
 
-typedef struct { IBusEngine parent; guint caps; gboolean enabled; IBusPropList* props; IBusProperty *pLang, *pAuto, *pOpen, *pLog, *pGuide, *pUpdate, *pAbout; } VikeyEngine;
+typedef struct { IBusEngine parent; guint caps; gboolean enabled; IBusPropList* props; IBusProperty *pLang, *pAuto, *pOpen, *pLog, *pGuide, *pUpdate, *pAbout; guint64 shown; } VikeyEngine;   // shown: what the panel has (0 = unknown)
 typedef struct { IBusEngineClass parent; } VikeyEngineClass;
 static GType vikey_engine_get_type();
 #define VIKEY_TYPE_ENGINE (vikey_engine_get_type())
@@ -153,15 +153,25 @@ static std::string hotkeyLabel() {   // "Alt+Z" (same names as vikey-settings)
     int k = hk & 0xFF; if (k != 0xFE) { for (auto& e : N) if (e.k == k) s += e.n; } else if (!s.empty()) s.pop_back();
     return s;
 }
+/// Brings the panel's menu up to date. Runs after every key, so it only sends what changed: each update is a D-Bus
+/// round of messages to the panel, and two of them per key made typing heavier for the whole desktop.
 static void updateLangProp(VikeyEngine* e) {
     if (!e || !e->pLang) return;
     int vi = core::language();
-    ibus_property_set_label(e->pLang, ibus_text_new_from_string(("Tiếng Việt   " + hotkeyLabel()).c_str()));   // the Mac's "Tiếng Việt  ⌥Z", a switch on in Vietnamese
-    ibus_property_set_symbol(e->pLang, ibus_text_new_from_string(vi ? "V" : "E"));
-    ibus_property_set_state(e->pLang, vi ? PROP_STATE_CHECKED : PROP_STATE_UNCHECKED);
-    ibus_engine_update_property(IBUS_ENGINE(e), e->pLang);
-    if (e->pLog && (bool)ibus_property_get_visible(e->pLog) != (prefs::getInt("TypingLogEnabled", 0) != 0)) { ibus_property_set_visible(e->pLog, !ibus_property_get_visible(e->pLog)); ibus_engine_update_property(IBUS_ENGINE(e), e->pLog); }
-    if (e->pAuto) { ibus_property_set_state(e->pAuto, prefs::getInt("AutoSwitchByTyping", 1) ? PROP_STATE_CHECKED : PROP_STATE_UNCHECKED); ibus_engine_update_property(IBUS_ENGINE(e), e->pAuto); }
+    bool autoOn = prefs::getInt("AutoSwitchByTyping", 1) != 0, logOn = prefs::getInt("TypingLogEnabled", 0) != 0;
+    std::string label = "Tiếng Việt   " + hotkeyLabel();   // the Mac's "Tiếng Việt  ⌥Z", a switch on in Vietnamese
+    guint64 now = ((guint64)std::hash<std::string>()(label) << 4) | (vi ? 1 : 0) | (autoOn ? 2 : 0) | (logOn ? 4 : 0) | 8;
+    guint64 was = e->shown;
+    if (now == was) return;
+    e->shown = now;
+    if (was == 0 || (now >> 4) != (was >> 4) || ((now ^ was) & 1)) {
+        ibus_property_set_label(e->pLang, ibus_text_new_from_string(label.c_str()));
+        ibus_property_set_symbol(e->pLang, ibus_text_new_from_string(vi ? "V" : "E"));
+        ibus_property_set_state(e->pLang, vi ? PROP_STATE_CHECKED : PROP_STATE_UNCHECKED);
+        ibus_engine_update_property(IBUS_ENGINE(e), e->pLang);
+    }
+    if (e->pLog && (bool)ibus_property_get_visible(e->pLog) != logOn) { ibus_property_set_visible(e->pLog, logOn); ibus_engine_update_property(IBUS_ENGINE(e), e->pLog); }
+    if (e->pAuto && (was == 0 || ((now ^ was) & 2))) { ibus_property_set_state(e->pAuto, autoOn ? PROP_STATE_CHECKED : PROP_STATE_UNCHECKED); ibus_engine_update_property(IBUS_ENGINE(e), e->pAuto); }
 }
 static void buildProps(VikeyEngine* e) {
     e->props = ibus_prop_list_new(); g_object_ref_sink(e->props);
@@ -223,6 +233,7 @@ static void vikey_focus_in(IBusEngine* engine) {
     VikeyEngine* e = (VikeyEngine*)engine; _active = e; _surroundingSeen = false; _pre.clear();
     ibus_engine_get_surrounding_text(engine, nullptr, nullptr, nullptr);   // asks this field to send its text (apps that can, do)
     ibus_engine_register_properties(engine, e->props);
+    e->shown = 0;   // the panel took the list again: send everything once
     std::string app = frontAppX11();
     core::focusChanged(app);
     _appPending = true;
@@ -249,7 +260,7 @@ static void vikey_property_activate(IBusEngine* engine, const gchar* name, guint
     else if (!strcmp(name, "about")) launchSettings("--about");
     updateLangProp(e);
 }
-static void vikey_engine_init(VikeyEngine* e) { e->caps = 0; e->enabled = FALSE; buildProps(e); }
+static void vikey_engine_init(VikeyEngine* e) { e->caps = 0; e->enabled = FALSE; e->shown = 0; buildProps(e); }
 static void vikey_engine_class_init(VikeyEngineClass* klass) {
     IBusEngineClass* c = IBUS_ENGINE_CLASS(klass);
     _parentClass = IBUS_ENGINE_CLASS(g_type_class_peek_parent(klass));
