@@ -166,6 +166,7 @@ final class KeyboardViewController: UIInputViewController, KeyboardViewDelegate 
         driver.autoSwitch = d.bool(forKey: VKSettings.Key.autoSwitch)
         driver.pauseAfterManual = d.bool(forKey: VKSettings.Key.pauseAfterManual) ? 5 : 0
         driver.modernOrthography = d.bool(forKey: VKSettings.Key.modernOrthography)
+        driver.telexStyle = d.integer(forKey: VKSettings.Key.telexStyle)
         driver.spelling = d.bool(forKey: VKSettings.Key.spelling)
         driver.restoreIfInvalid = d.bool(forKey: VKSettings.Key.restoreIfInvalid)
         webFieldsEnglish = d.bool(forKey: VKSettings.Key.englishForWebFields)

@@ -152,3 +152,6 @@ D57	1	vieejt.<nam 	vieetjnam 	1	Backspace over punctuation brings back the word 
 D57	1	too.<b 	toob 	1	the restored word keeps its letters when the next word restores
 D57	1	vieejt.< nam 	việt nam 	1	Backspace over punctuation, then a space: the word stays
 D57	1	toottoottoottoottoottoottoottoottoot.<x 	tôttoottoottoottoottoottoottoottootx 	1	a word too long for the key list comes back as it was: never replaced by part of its keys
+D56	1	[ 	ơ 	1	Telex (the default style): a lone [ is ơ
+D56	1	] 	ư 	1	Telex: a lone ] is ư
+D56	1	w 	ư 	1	Telex: a lone w is ư

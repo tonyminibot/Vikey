@@ -9,6 +9,7 @@ struct MainView: View {
     @AppStorage(PrefKey.spelling) private var spelling = 1
     @AppStorage(PrefKey.restoreIfInvalid) private var restore = 1
     @AppStorage(PrefKey.teencode) private var teencode = 1
+    @AppStorage(PrefKey.telexStyle) private var telexStyle = 0
     @AppStorage(PrefKey.openSections) private var openSections = "auto"
     @AppStorage(PrefKey.autoSwitch) private var autoSwitch = 1
     @AppStorage(PrefKey.smartSwitch) private var smartSwitch = 1
@@ -59,6 +60,13 @@ struct MainView: View {
                 Section {
                     fold("viet", "Gõ tiếng Việt", vietSummary)
                     if isOpen("viet") {
+                    Picker(selection: Binding(get: { telexStyle }, set: { telexStyle = $0; Preferences.apply() })) {
+                        Text("Telex").tag(0)
+                        Text("Telex đơn giản 1").tag(1)
+                        Text("Telex đơn giản 2").tag(2)
+                    } label: {
+                        Tip("Kiểu gõ", "Telex: [ ra ơ, ] ra ư, w ra ư. Telex đơn giản 1: [ ] là dấu ngoặc, w đứng riêng vẫn là w. Telex đơn giản 2: [ ] là dấu ngoặc, w vẫn ra ư. Cả ba kiểu đều gõ uw, ow, aw ra ư, ơ, ă.")
+                    }
                     Picker(selection: Binding(get: { modern }, set: { modern = $0; Preferences.apply() })) {
                         Text("hoà, thuý").tag(1)
                         Text("hòa, thúy").tag(0)
@@ -195,6 +203,7 @@ struct MainView: View {
     }
     private var vietSummary: String {
         var parts = [modern != 0 ? "hoà, thuý" : "hòa, thúy"]
+        if telexStyle != 0 { parts.insert("Telex đơn giản \(telexStyle)", at: 0) }
         if spelling != 0 { parts.append("chính tả") }
         if teencode != 0 { parts.append("teencode") }
         return parts.joined(separator: " · ")

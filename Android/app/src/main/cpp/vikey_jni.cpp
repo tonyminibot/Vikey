@@ -59,6 +59,7 @@ JNIEXPORT void JNICALL Java_app_vikey_ime_VikeyDriver_configure(JNIEnv*, jclass,
     D(h)->autoSwitch = autoSwitch; vAutoSwitchByTyping = autoSwitch; D(h)->pauseAfterManual = pause;
     vCheckSpelling = spelling; vSetCheckSpelling(); vRestoreIfWrongSpelling = restore; vUseModernOrthography = modern;
 }
+JNIEXPORT void JNICALL Java_app_vikey_ime_VikeyDriver_setTelexStyle(JNIEnv*, jclass, jint style) { vTelexStyle = style < 0 ? 0 : style > 2 ? 2 : style; }   // D56
 JNIEXPORT jstring JNICALL Java_app_vikey_ime_VikeyDriver_typeChar(JNIEnv* env, jclass, jlong h, jchar c, jdouble now) {
     Uint16 key; bool shift;
     if (!keyFor(c, key, shift)) { D(h)->resetContext(); VKEdit e; e.text.push_back((char16_t)c); return packEdit(env, e); }

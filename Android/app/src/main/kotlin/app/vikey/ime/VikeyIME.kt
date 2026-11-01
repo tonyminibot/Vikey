@@ -170,6 +170,7 @@ class VikeyIME : InputMethodService(), KeyboardView.Listener, EmojiKeyboardView.
         driver.autoSwitch = b(Settings.AUTO_SWITCH)
         driver.pauseAfterManual = if (b(Settings.PAUSE_AFTER_MANUAL)) 5.0 else 0.0
         driver.modernOrthography = b(Settings.MODERN_ORTHOGRAPHY)
+        driver.telexStyle = p.getInt(Settings.TELEX_STYLE, 0)
         driver.spelling = b(Settings.SPELLING)
         driver.restoreIfInvalid = b(Settings.RESTORE_IF_INVALID)
         driver.applySettings()

@@ -15,6 +15,21 @@ Status values: **Shipped** (in a build Tony has), **Agreed** (decided, not built
 
 ---
 
+## 56. Telex style: Telex, Simple Telex 1, Simple Telex 2
+
+**Status:** Agreed (2026-10-31), asked in #28.
+
+**Problem.** In Telex, a lone `[` types ơ and `]` types ư, so typing brackets takes two presses. OpenKey had two Simple Telex styles for this, which Vikey removed when it forked.
+
+**Decision.** A "Kiểu gõ" (typing style) setting on every platform, Telex by default:
+- **Telex:** as before. `[` gives ơ, `]` gives ư, a lone `w` gives ư.
+- **Simple Telex 1:** `[` and `]` are brackets and end the word like `.` and `,` (spell check and auto switch run, as at any punctuation). A `w` that joins no vowel stays `w` (`tw` stays `tw`).
+- **Simple Telex 2:** `[` and `]` are brackets and end the word, as in Simple Telex 1. A lone `w` still gives ư.
+
+`uw`, `ow`, `aw` give ư, ơ, ă in all three. Users coming from OpenKey keep their Simple Telex choice. Test cases: `Tools/autoswitch/rules/telex_simple1.tsv` and `telex_simple2.tsv`.
+
+---
+
 ## 55. Linux: an Arch Linux package
 
 **Status:** Agreed (2026-10-31), in PR #27.
@@ -669,7 +684,7 @@ He approved Otto's suggested cuts and added: "gõ tắt: remove".
   - Turning off for other input languages, now automatic and checked once per input-source change instead of on every keystroke.
   - Launch at login.
 - **Removed**
-  - VNI, Simple Telex 1 and 2.
+  - VNI, Simple Telex 1 and 2 (Simple Telex came back as a setting in D56).
   - Code tables other than Unicode (TCVN3, VNI Windows, Unicode compound, CP1258) and remembering a code table per app.
   - The convert tool.
   - Quick Telex (cc → ch…) and quick start/end consonants.

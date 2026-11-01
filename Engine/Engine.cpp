@@ -141,6 +141,8 @@ void* vKeyInit() {
 bool isWordBreak(const vKeyEvent& event, const vKeyEventState& state, const Uint16& data) {
     if (event == vKeyEvent::Mouse)
         return true;
+    if (vTelexStyle != 0 && (data == KEY_LEFT_BRACKET || data == KEY_RIGHT_BRACKET))   //Simple Telex: brackets are punctuation (D56)
+        return true;
     for (i = 0; i < _breakCode.size(); i++) {
         if (_breakCode[i] == data) {
             return true;
@@ -165,6 +167,7 @@ Byte _spellingEndIndex = 0;
  *  z / dz for d ("zui zẻ", "zô", "dzô"), the open rimes "ie" ("bíe") and "oy" ("gòy"), and k after i or ư ("thík",
  *  "ừk"). Idea from VietTelex (MIT). "wá" isn't possible in Telex: w is ư. */
 int vTeencode = 1;   //on by default (Tony, 2026-10-31)
+int vTelexStyle = 0;  //Telex (D56); 1 and 2 are the Simple Telex styles from OpenKey
 #include "TeencodeData.h"
 static bool _teenRule = false;   //this word is valid only by a teencode rule: kept at its end only if it's a known word
 /** Is the word in TypingWord a known teencode word? (letters with ^ / +, tone digit last; see build_teencode.py) */
@@ -1225,7 +1228,7 @@ void handleMainKey(const Uint16& data, const bool& isCaps) {
     }
     
     if (!isChanged) {
-        if (data == KEY_W) {
+        if (data == KEY_W && vTelexStyle != 1) {   //Simple Telex 1: a w that joins no vowel stays w (D56)
             checkForStandaloneChar(data, isCaps, KEY_U);
         } else {
             insertKey(data, isCaps);
@@ -1848,7 +1851,8 @@ static bool asIsSwitchBreak(const vKeyEvent& event, const Uint16& data, const Ui
     return data == KEY_COMMA || data == KEY_DOT || data == KEY_SEMICOLON || data == KEY_ENTER || data == KEY_RETURN ||
            data == KEY_QUOTE ||                                 //closing quote, or an apostrophe: doesn't, we're
            (data == KEY_SLASH && capsStatus == 1) || (data == KEY_1 && capsStatus == 1) || (data == KEY_0 && capsStatus == 1) ||
-           (data == KEY_9 && capsStatus == 1);                  //"(" right after a word: web(làm (D27)
+           (data == KEY_9 && capsStatus == 1) ||                //"(" right after a word: web(làm (D27)
+           (vTelexStyle != 0 && (data == KEY_LEFT_BRACKET || data == KEY_RIGHT_BRACKET));   //Simple Telex brackets, like ( ) (D56)
 }
 
 /** Everything the engine keeps between keys, so a word can be replayed on a scratch session. */

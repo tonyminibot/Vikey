@@ -378,6 +378,7 @@ extern "C" {
         vSetCheckSpelling();
         vRestoreIfWrongSpelling = get(@"RestoreIfInvalidWord", 1);
         vTeencode = get(@"Teencode", 1);   // D53: zui zẻ, zậy, gòy, thík
+        vTelexStyle = get(@"TelexStyle", 0);   // D56: Telex / Simple Telex 1 / 2
         vUseModernOrthography = get(@"ModernOrthography", 1);
                 vUseSmartSwitchKey = get(@"UseSmartSwitchKey", 1);
         vAutoSwitchByTyping = AutoSwitchPaused() ? 0 : AutoSwitchForApp(_frontMostApp);
