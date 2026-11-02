@@ -22,3 +22,6 @@ look_forward_D35	vi	vaof office its nhaats 	vào office ít nhất
 dd_one_capital_D39	vi	ddi DDaf Nawngx 	đi Đà Nẵng 
 caps_telex_en_D41	en	THOONG 	THÔNG 
 acronym_keeps_prev_D42	vi	e lieen heej been ASL 	e liên hệ bên ASL 
+numpad_digit_D33	vi	a{num1}a	a1a
+numpad_operator_ends_word	vi	a{add}a	a+a
+restore_then_home_moves	vi	testflight{home}a	atestflight

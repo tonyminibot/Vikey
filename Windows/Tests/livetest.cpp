@@ -2,7 +2,7 @@
 // types each case's keys with SendInput (as a user would; Vikey's hooks see them), and compares
 // the text that ends up in the control with the expected text. Cases: cases.tsv (name<TAB>start
 // language vi|en<TAB>keys<TAB>expected). Keys: letters, digits, space, punctuation as typed;
-// \b Backspace, \n Enter, \t Tab, {alt+z} hotkey (default). Exit code = number of failures.
+// \b Backspace, \n Enter, \t Tab, {alt+z} hotkey (default), {home} {end} {num0}..{num9} {add} named keys. Exit code = number of failures.
 #include <windows.h>
 #include <string>
 #include <vector>
@@ -32,6 +32,10 @@ static void typeKeys(const std::wstring& s) {
         if (c == L'{') { size_t e = s.find(L'}', i); std::wstring cmd = s.substr(i + 1, e - i - 1); i = e;
             if (cmd == L"alt+z") { INPUT in[4] = {}; in[0].type = in[1].type = in[2].type = in[3].type = INPUT_KEYBOARD; in[0].ki.wVk = VK_MENU; in[1].ki.wVk = 'Z'; in[2].ki.wVk = 'Z'; in[2].ki.dwFlags = KEYEVENTF_KEYUP; in[3].ki.wVk = VK_MENU; in[3].ki.dwFlags = KEYEVENTF_KEYUP; SendInput(4, in, sizeof(INPUT)); Sleep(30); }
             else if (cmd == L"wait") Sleep(1500);
+            else if (cmd == L"home") key(VK_HOME);
+            else if (cmd == L"end") key(VK_END);
+            else if (cmd == L"add") key(VK_ADD);
+            else if (cmd.size() == 4 && cmd.compare(0, 3, L"num") == 0 && cmd[3] >= L'0' && cmd[3] <= L'9') key((WORD)(VK_NUMPAD0 + (cmd[3] - L'0')));
             continue; }
         SHORT v = VkKeyScanW(c);
         if (v == -1) {   // no key for it on this layout (ô, í): type the character itself, as another input tool would

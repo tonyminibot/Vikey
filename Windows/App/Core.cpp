@@ -53,6 +53,7 @@ static HWINEVENTHOOK _focusHook = nullptr, _fgHook = nullptr;
 static vKeyHookState* pData = nullptr;
 static unsigned _flag = 0, _lastFlag = 0;
 static Uint16 _keycode = 0;
+static DWORD _keyVk = 0, _keyExtended = 0;   // the key as Windows sent it: re-sent as is after a restore (Home, numpad 1...)
 static bool _hasJustUsedHotKey = false;
 static std::function<void(int)> _observer;
 static std::wstring _frontApp = L"UnknownApp";   // exe name of the app in front
@@ -295,11 +296,11 @@ static void inputChar(INPUT& in, wchar_t c, bool down) {
 static std::vector<INPUT> _batch;
 static void batchBackspaces(int n) { for (int i = 0; i < n; i++) { INPUT a, b; inputKey(a, VK_BACK, true); inputKey(b, VK_BACK, false); _batch.push_back(a); _batch.push_back(b); } }
 static void batchText(const wchar_t* text, int count) { for (int i = 0; i < count; i++) { INPUT a, b; inputChar(a, text[i], true); inputChar(b, text[i], false); _batch.push_back(a); _batch.push_back(b); } }
-static void batchKey(WORD vk, bool shift) {
-    INPUT a, b, c, d;
-    if (shift) { inputKey(a, VK_SHIFT, true); _batch.push_back(a); }
-    inputKey(c, vk, true); inputKey(d, vk, false); _batch.push_back(c); _batch.push_back(d);
-    if (shift) { inputKey(b, VK_SHIFT, false); _batch.push_back(b); }
+/// A key press and release. Modifiers aren't sent: the user is still holding them (an injected Shift up would
+/// release a Shift that is physically down, and the next letters would come out lowercase).
+static void batchKey(WORD vk, DWORD extra = 0) {
+    INPUT c, d;
+    inputKey(c, vk, true, extra); inputKey(d, vk, false, extra); _batch.push_back(c); _batch.push_back(d);
 }
 static void flushBatch() { if (!_batch.empty()) { SendInput((UINT)_batch.size(), _batch.data(), sizeof(INPUT)); _batch.clear(); } }
 
@@ -317,7 +318,8 @@ static void batchEngineChars() {
     }
     if (pData->code == vRestoreAndStartNewSession) startNewSession();
     if (n > 0) batchText(text, n);
-    if (sendControlKey) { WORD vk = vkOf(_keycode); if (vk) batchKey(vk, (_flag & F_SHIFT) != 0); }
+    // the key itself, not the engine's code for it: Home, End and numpad keys all reach the engine as Esc
+    if (sendControlKey) { WORD vk = _keyVk ? (WORD)_keyVk : vkOf(_keycode); if (vk) batchKey(vk, _keyExtended); }
 }
 
 /// Sends the engine's result for the current key: backspaces, then the new characters.
@@ -530,6 +532,7 @@ static LRESULT CALLBACK keyboardHook(int nCode, WPARAM wParam, LPARAM lParam) {
     if (!down) return CallNextHookEx(_kbHook, nCode, wParam, lParam);
 
     _keycode = engineKey(k->vkCode);
+    _keyVk = k->vkCode; _keyExtended = (k->flags & LLKHF_EXTENDED) ? KEYEVENTF_EXTENDEDKEY : 0;
     // emoji picker hotkey (opens and closes it): a key with exactly these modifiers
     if (vEmojiHotkey && GET_SWITCH_KEY(vEmojiHotkey) == _keycode &&
         HAS_CONTROL(vEmojiHotkey) == GET_BOOL(_flag & F_CONTROL) && HAS_OPTION(vEmojiHotkey) == GET_BOOL(_flag & F_ALT) &&
@@ -544,7 +547,11 @@ static LRESULT CALLBACK keyboardHook(int nCode, WPARAM wParam, LPARAM lParam) {
         else PostMessageW(vEmojiWindow, WM_APP + 10, k->vkCode, (LPARAM)_flag);
         return 1;
     }
-    if (_keycode == KEY_EMPTY) return CallNextHookEx(_kbHook, nCode, wParam, lParam);   // F-keys, media keys...
+    if (_keycode == KEY_EMPTY) {   // F-keys, media keys...: not ours. A key typing a character still ends the word.
+        _lastFlag = 0;   // Ctrl+Shift+F5, Ctrl+Shift+numpad +: releasing Ctrl+Shift afterwards isn't the hotkey
+        if (unmodeledKeyEndsWord(k->vkCode)) { TLEndWord("other"); resetTyping(); }
+        return CallNextHookEx(_kbHook, nCode, wParam, lParam);
+    }
 
     // switch language hotkey
     if (GET_SWITCH_KEY(vSwitchKeyStatus) != _keycode) _lastFlag = 0;

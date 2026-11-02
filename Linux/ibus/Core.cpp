@@ -52,6 +52,7 @@ static std::string TLTime() { struct timeval tv; gettimeofday(&tv, nullptr); str
 static std::string TLToday() { time_t n = time(nullptr); struct tm t; localtime_r(&n, &t); char b[16]; strftime(b, sizeof b, "%Y-%m-%d", &t); return b; }
 static void TLCount(const char* name) { if (!vTypingLogEnabled) return; std::string key = "TLStat_" + TLToday() + "_" + name; prefs::setInt(key.c_str(), prefs::getInt(key.c_str(), 0) + 1); }
 void flushTypingLog() {
+    prefs::flushStats();
     std::string chunk; { std::lock_guard<std::mutex> g(_tlMutex); chunk.swap(_tlPending); }
     if (chunk.empty()) return;
     std::string path = typingLogPath(); mkdir(prefs::dataDir().c_str(), 0700);
@@ -68,8 +69,9 @@ static bool TLKeysAllowed() {
 static void TLWrite(std::string fields) {
     if (!vTypingLogEnabled) return;
     std::string line = "{" + fields + ",\"t\":\"" + TLTime() + "\",\"app\":\"" + jsonEscape(_tlApp) + "\"}\n";
-    bool flush; { std::lock_guard<std::mutex> g(_tlMutex); _tlPending += line; flush = _tlPending.size() > 8192; }
-    if (flush) flushTypingLog();
+    // no file write here (this runs in the IBus key callback): the 10 s flush timer writes it, and a few seconds of
+    // typing is a few KB
+    std::lock_guard<std::mutex> g(_tlMutex); _tlPending += line;
 }
 static const char* TLLang(int lang) { return lang ? "vi" : "en"; }
 static void TLEndWord(const std::string& reason) {
@@ -146,6 +148,10 @@ void command(const std::string& line) {
         int lang = line.find(" vi") != std::string::npos ? 1 : 0; bool user = line.find("user") != std::string::npos;
         if (user) setLanguageByUser(lang); else setLanguageQuiet(lang);
         if (vTypingLogEnabled) TLWrite(std::string("\"e\":\"cmd\",\"line\":\"") + jsonEscape(line) + "\",\"as\":" + std::to_string(vAutoSwitchByTyping) + ",\"pref\":" + std::to_string(prefs::getInt("AutoSwitchByTyping", 1)) + ",\"paused\":" + (AutoSwitchPaused() ? "true" : "false") + ",\"lang\":" + std::to_string(vLanguage));
+    } else if (line == "clear-log") {
+        // the settings app's Clear: the engine holds the counters (and the log lines not written yet) in memory, so
+        // it clears them itself, or its next flush would write them back over the cleared files
+        _tlWordLen = 0; clearTypingLog(); prefs::clearStats();
     }
 }
 void reloadSettings() {
