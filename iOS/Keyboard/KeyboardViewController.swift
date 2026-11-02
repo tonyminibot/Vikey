@@ -112,7 +112,8 @@ final class KeyboardViewController: UIInputViewController, KeyboardViewDelegate 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         setAI(.none); selection = nil
-        if AIAssist.available { AIAssist.prewarm() }   // the model loads while the user starts typing
+        AIAssist.refresh()   // off the main thread: whether the model is there, then it loads while the user starts typing
+        keyboard.resetTouches()   // a touch cut off when the keyboard last went away must not hold on to a key
         if let ev = emojiView, !ev.isHidden { emojiKeyboardClose(ev) }   // a new field opens on the letters
         if KeyboardView.searchTop != nil, emojiView?.searching != true {     // static: it outlives a closed keyboard
             KeyboardView.searchTop = nil

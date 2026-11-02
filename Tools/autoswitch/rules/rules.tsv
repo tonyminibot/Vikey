@@ -155,3 +155,6 @@ D57	1	toottoottoottoottoottoottoottoottoot.<x 	tôttoottoottoottoottoottoottoott
 D56	1	[ 	ơ 	1	Telex (the default style): a lone [ is ơ
 D56	1	] 	ư 	1	Telex: a lone ] is ư
 D56	1	w 	ư 	1	Telex: a lone w is ư
+D58	1	docs 	docs 	0	docs (documentation) in Vietnamese mode stays English (X report, Tony)
+D58	1	xem docs nhes 	xem docs nhé 	1	docs in a Vietnamese sentence
+D58	1	nois docs 	nói dóc 	1	"nói dóc" (to lie) still converts

@@ -5,6 +5,16 @@ Each entry records what was asked, what was decided, and its status. Newest firs
 
 Status values: **Shipped** (in a build Tony has), **Agreed** (decided, not built yet), **Rejected**.
 
+## 58. "docs" in Vietnamese mode is English
+
+**Status:** Shipped 2026-11-02 (bug from an X user, via Tony).
+
+**Problem.** In Vietnamese mode "docs" gave "dóc": the subtitle corpus has "docs" at English score -1, below "dóc" (1).
+
+**Fix.** "docs" gets English score 20 (build_dict.py `EN_OVERRIDE`, patched in the built data like D48). 10 was not enough. "nói dóc" (to lie) still converts: the word before decides it.
+
+**Result.** Manual switches 64 → 61 (chat), 77 → 74 (chat_typos), 123 → 120 (synthetic); wrong words unchanged; three golden lines now keep "docs". Rules D58 (3 cases), reported bug R20.
+
 ## 57. Backspace over punctuation lost the word before it
 
 **Status:** Agreed (2026-11-01): a bug fix, in PR #33.

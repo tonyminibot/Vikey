@@ -13,21 +13,29 @@ enum AIAssist {
     static var stub: Stub?
     #endif
 
+    /// Whether Apple Intelligence can answer here. Read from a cached value: asking the system can block for a while
+    /// on a cold start (seen as a keyboard that took no taps after a notification opened an app), so the keyboard
+    /// never asks on the main thread; `refresh()` asks off it when the keyboard appears.
     static var available: Bool {
         #if DEBUG
         if stub != nil { return true }
         #endif
-        #if canImport(FoundationModels)
-        if #available(iOS 26.0, *) { return SystemLanguageModel.default.isAvailable }
-        #endif
-        return false
+        return cachedAvailable
     }
+    private static var cachedAvailable = false
 
-    /// Starts the model early so the first answer is quicker (called when the keyboard appears).
-    static func prewarm() {
-        #if canImport(FoundationModels)
-        if #available(iOS 26.0, *), SystemLanguageModel.default.isAvailable { Impl.prewarm() }
-        #endif
+    /// Asks the system off the main thread, then starts the model early so the first answer is quicker.
+    static func refresh() {
+        DispatchQueue.global(qos: .utility).async {
+            var on = false
+            #if canImport(FoundationModels)
+            if #available(iOS 26.0, *) { on = SystemLanguageModel.default.isAvailable }
+            #endif
+            DispatchQueue.main.async { cachedAvailable = on }
+            #if canImport(FoundationModels)
+            if on, #available(iOS 26.0, *) { Impl.prewarm() }
+            #endif
+        }
     }
 
     /// The selection with spelling, grammar and punctuation fixed, in its own language(s). nil if it failed.

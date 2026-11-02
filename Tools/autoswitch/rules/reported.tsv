@@ -20,3 +20,4 @@ R16	2026-10-29	D42	fixed	1	e lieen heej been ASL 	e liên hệ bên ASL 	0	"e li
 R17	2026-10-30	D48	fixed	1	la vowis os 	la với ó 	1	"la với ó" gave "la với os"
 R18	2026-10-30	D49	fixed	1	xin #hello#<s	xin hells	1	"xin ⌥Z hello ⌥Z ⌫ s" gave "xin heín"
 R19	2026-10-31	D53	fixed	1	zui zer 	zui zẻ 	1	teencode chat spelling ("zui zẻ", "zậy", "gòy", "thík") was put back to its keys
+R20	2026-11-02	D58	fixed	1	docs 	docs 	0	"docs" gave "dóc" (X user report via Tony)

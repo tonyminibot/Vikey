@@ -550,6 +550,13 @@ final class KeyboardView: UIView {
         reset()
     }
 
+    /// A fresh start when the keyboard appears: no key held, no quiet period left over.
+    func resetTouches() {
+        if let c = touchKey { release(c) }
+        quietUntil = 0
+        reset()
+    }
+
     private func reset() {
         holdTimer?.invalidate(); holdTimer = nil
         touch = nil; touchKey = nil; slideFromLayer = false
