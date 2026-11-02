@@ -57,6 +57,8 @@ extern NSNotificationName const VikeyLanguageDidChangeNotification;
 + (NSString *)typingLogPath;
 + (NSDictionary<NSString *, NSDictionary<NSString *, NSNumber *> *> *)typingLogStats;
 + (void)flushTypingLog;
+/// Flushes, then calls done on the main thread once the log file has everything (and any clear has run).
++ (void)flushTypingLogThen:(void (^)(void))done;
 + (void)clearTypingLog;
 
 @end
