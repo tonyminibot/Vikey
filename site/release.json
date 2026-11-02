@@ -23,16 +23,16 @@
 },
 "windows": {
 "x64": {
-"download_url": "/downloads/Vikey-1.0.28-x64-Setup.exe",
-"portable_url": "/downloads/Vikey-1.0.28-x64-portable.zip",
-"sha256": "687f14d6d22c9e4a3c270a9d87f4a87d25074bcd17c89bea2880ec5bb3e76e99"
+"download_url": "/downloads/Vikey-1.0.31-x64-Setup.exe",
+"portable_url": "/downloads/Vikey-1.0.31-x64-portable.zip",
+"sha256": "a03a5864231f1b499e6802565f22a42ab7cd25a0c9d83f39b32d97989124768d"
 },
 "arm64": {
-"download_url": "/downloads/Vikey-1.0.28-arm64-Setup.exe",
-"portable_url": "/downloads/Vikey-1.0.28-arm64-portable.zip",
-"sha256": "d20d3e95874981faf50418e7d53f06f4ca4be830940514bb30a87dd630d30f90"
+"download_url": "/downloads/Vikey-1.0.31-arm64-Setup.exe",
+"portable_url": "/downloads/Vikey-1.0.31-arm64-portable.zip",
+"sha256": "4fa5b3b7e47d4a2316d4dec812dba282f9a3a597dc79ecbeedfb84c6a543d8f8"
 },
-"version": "1.0.28"
+"version": "1.0.31"
 },
 "ios": {
 "app_store_url": "https://apps.apple.com/app/id6827958793"
