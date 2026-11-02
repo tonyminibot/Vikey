@@ -190,6 +190,7 @@ final class KeyboardView: UIView {
         diagLabel.isHidden = diagnostics == nil
         addSubview(bar)
         bar.onPick = { [unowned self] i in self.delegate?.keyboard(self, pickSuggestion: i) }
+        bar.onBrand = { [unowned self] in self.openVikeyApp() }
         addSubview(popup); popup.isHidden = true
         addSubview(alternates); alternates.isHidden = true
         setFonts()
@@ -762,6 +763,7 @@ struct Suggestion: Equatable {
 /// The strip above the keys: up to three words, like the system keyboard's.
 final class SuggestionBar: UIView {
     var onPick: ((Int) -> Void)?
+    var onBrand: (() -> Void)?
     var dark = false { didSet { if dark != oldValue { restyle() } } }
     private var cells: [UIButton] = []
     private var lines: [UIView] = []
@@ -781,8 +783,10 @@ final class SuggestionBar: UIView {
         markIcon.layer.cornerCurve = .continuous
         markIcon.layer.masksToBounds = true
         mark.addSubview(markIcon); mark.addSubview(markText)
-        mark.isUserInteractionEnabled = false
-        mark.isAccessibilityElement = false
+        mark.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tapBrand)))   // opens the Vikey app (Tony)
+        mark.isAccessibilityElement = true
+        mark.accessibilityLabel = "Vikey"
+        mark.accessibilityTraits = .button
         addSubview(mark)
         for i in 0..<3 {
             let b = UIButton(type: .custom)
@@ -798,6 +802,8 @@ final class SuggestionBar: UIView {
         restyle()
     }
     required init?(coder: NSCoder) { fatalError() }
+
+    @objc private func tapBrand() { onBrand?() }
 
     @objc private func tap(_ b: UIButton) { if b.tag < items.count { onPick?(b.tag) } }
 
@@ -852,5 +858,23 @@ final class SuggestionBar: UIView {
         let w = bounds.width / 3
         for (i, b) in cells.enumerated() { b.frame = CGRect(x: CGFloat(i) * w + 2, y: 2, width: w - 4, height: bounds.height - 4) }
         for (i, l) in lines.enumerated() { l.frame = CGRect(x: CGFloat(i + 1) * w - 0.5, y: bounds.height * 0.28, width: 1, height: bounds.height * 0.44) }
+    }
+}
+
+extension KeyboardView {
+    /// Opens the Vikey app (vikey://). A keyboard can't call UIApplication.shared, so this walks the responder chain
+    /// to the host's UIApplication and calls open(_:options:completionHandler:) on it by selector.
+    func openVikeyApp() {
+        guard let url = URL(string: "vikey://") else { return }
+        let sel = NSSelectorFromString("openURL:options:completionHandler:")
+        var r: UIResponder? = self
+        while let next = r {
+            if next is UIApplication, next.responds(to: sel), let imp = next.method(for: sel) {
+                typealias Open = @convention(c) (AnyObject, Selector, NSURL, NSDictionary, AnyObject?) -> Void
+                unsafeBitCast(imp, to: Open.self)(next, sel, url as NSURL, NSDictionary(), nil)
+                return
+            }
+            r = next.next
+        }
     }
 }

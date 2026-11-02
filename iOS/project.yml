@@ -33,6 +33,9 @@ targets:
         CFBundleDisplayName: Vikey
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleURLTypes:
+          - CFBundleURLName: com.devuap.vikey.ios
+            CFBundleURLSchemes: [vikey]   # the keyboard's Vikey mark opens the app
         UILaunchScreen: {}
         ITSAppUsesNonExemptEncryption: false
         CFBundleDevelopmentRegion: en
