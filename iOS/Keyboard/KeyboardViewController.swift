@@ -98,7 +98,8 @@ final class KeyboardViewController: UIInputViewController, KeyboardViewDelegate 
         heightConstraint = h
         let saved = UserDefaults.standard.object(forKey: languageKey) as? Int ?? 1
         driver.language = saved
-        DispatchQueue.global(qos: .utility).async { _ = EmojiIndex.shared }   // the emoji keyboard opens instantly
+        // the emoji index is built when the emoji keyboard first opens, not here: at launch it pushed the keyboard
+        // toward iOS's memory limit (iOS swapped in its own keyboard ~100 ms after Vikey opened, Tony)
         requestSupplementaryLexicon { [weak self] lex in
             var r: [String: String] = [:]
             for e in lex.entries where e.userInput.lowercased() != e.documentText.lowercased()   // (contact names list themselves)
@@ -112,7 +113,7 @@ final class KeyboardViewController: UIInputViewController, KeyboardViewDelegate 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         setAI(.none); selection = nil
-        AIAssist.refresh()   // off the main thread: whether the model is there, then it loads while the user starts typing
+        AIAssist.refresh()   // off the main thread: whether the model is there
         keyboard.resetTouches()   // a touch cut off when the keyboard last went away must not hold on to a key
         if let ev = emojiView, !ev.isHidden { emojiKeyboardClose(ev) }   // a new field opens on the letters
         if KeyboardView.searchTop != nil, emojiView?.searching != true {     // static: it outlives a closed keyboard

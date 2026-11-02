@@ -24,7 +24,8 @@ enum AIAssist {
     }
     private static var cachedAvailable = false
 
-    /// Asks the system off the main thread, then starts the model early so the first answer is quicker.
+    /// Asks the system off the main thread. No prewarm: loading the model at launch cost ~5 MB on top of a keyboard
+    /// close to iOS's memory limit; the first answer is a little slower instead.
     static func refresh() {
         DispatchQueue.global(qos: .utility).async {
             var on = false
@@ -32,9 +33,6 @@ enum AIAssist {
             if #available(iOS 26.0, *) { on = SystemLanguageModel.default.isAvailable }
             #endif
             DispatchQueue.main.async { cachedAvailable = on }
-            #if canImport(FoundationModels)
-            if on, #available(iOS 26.0, *) { Impl.prewarm() }
-            #endif
         }
     }
 
@@ -127,7 +125,6 @@ private enum Impl {
     Text can be Vietnamese, English or both; continue in the language the sentence is in. Each item is a single word.
     """
 
-    static func prewarm() { LanguageModelSession(instructions: proofreadRules).prewarm() }
 
     static func proofread(_ text: String) async -> String? {
         let s = LanguageModelSession(instructions: proofreadRules)
