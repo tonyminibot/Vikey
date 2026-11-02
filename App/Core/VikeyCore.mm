@@ -91,6 +91,9 @@ extern "C" {
     CGEventRef _newEventDown, _newEventUp;
     CGKeyCode _keycode;
     CGEventFlags _flag, _lastFlag = 0, _privateFlag;
+    // a key or click came while modifiers were held: they were for it, not a modifier-only hotkey (cleared when all are up)
+    static bool _modifierChordUsed = false;
+    #define MODIFIER_FLAGS (kCGEventFlagMaskControl | kCGEventFlagMaskAlternate | kCGEventFlagMaskCommand | kCGEventFlagMaskShift)
     CGEventTapProxy _proxy;
     
     Uint16 _newCharString[MAX_UNICODE_STRING];
@@ -622,16 +625,19 @@ extern "C" {
         if (sendControlKey) SendKeyCode(_keycode);
     }
 
-    bool checkHotKey(int hotKeyData, bool checkKeyCode=true) {
+    /// flags: the modifiers held. For a key hotkey (⌥Z) that's the key press's own flags, so holding ⌥ and
+    /// pressing Z again (or auto-repeat) switches again instead of typing "Ω"; for modifiers alone (⌃⇧) it's
+    /// the most modifiers held before the release.
+    bool checkHotKey(int hotKeyData, CGEventFlags flags, bool checkKeyCode=true) {
         if ((hotKeyData & (~0x8000)) == EMPTY_HOTKEY)
             return false;
-        if (HAS_CONTROL(hotKeyData) ^ GET_BOOL(_lastFlag & kCGEventFlagMaskControl))
+        if (HAS_CONTROL(hotKeyData) ^ GET_BOOL(flags & kCGEventFlagMaskControl))
             return false;
-        if (HAS_OPTION(hotKeyData) ^ GET_BOOL(_lastFlag & kCGEventFlagMaskAlternate))
+        if (HAS_OPTION(hotKeyData) ^ GET_BOOL(flags & kCGEventFlagMaskAlternate))
             return false;
-        if (HAS_COMMAND(hotKeyData) ^ GET_BOOL(_lastFlag & kCGEventFlagMaskCommand))
+        if (HAS_COMMAND(hotKeyData) ^ GET_BOOL(flags & kCGEventFlagMaskCommand))
             return false;
-        if (HAS_SHIFT(hotKeyData) ^ GET_BOOL(_lastFlag & kCGEventFlagMaskShift))
+        if (HAS_SHIFT(hotKeyData) ^ GET_BOOL(flags & kCGEventFlagMaskShift))
             return false;
         if (checkKeyCode) {
             if (GET_SWITCH_KEY(hotKeyData) != _keycode)
@@ -1186,8 +1192,11 @@ extern "C" {
         if (type == kCGEventKeyDown) {
             if (GET_SWITCH_KEY(vSwitchKeyStatus) != _keycode) {
                 _lastFlag = 0;
+                if (_flag & MODIFIER_FLAGS) _modifierChordUsed = true;   // ⌃⇧K: releasing ⌃⇧ afterwards isn't the hotkey
             } else {
-                if (GET_SWITCH_KEY(vSwitchKeyStatus) == _keycode && checkHotKey(vSwitchKeyStatus, GET_SWITCH_KEY(vSwitchKeyStatus) != 0xFE)){
+                if (GET_SWITCH_KEY(vSwitchKeyStatus) == _keycode && checkHotKey(vSwitchKeyStatus, _flag, GET_SWITCH_KEY(vSwitchKeyStatus) != 0xFE)){
+                    // holding ⌥Z auto-repeats ~30 times a second: switch once per press, swallow the repeats
+                    if (CGEventGetIntegerValueField(event, kCGKeyboardEventAutorepeat)) return NULL;
                     switchLanguage();
                     _lastFlag = 0;
                     _hasJustUsedHotKey = true;
@@ -1195,12 +1204,21 @@ extern "C" {
                 }
             }
             _hasJustUsedHotKey = _lastFlag != 0;
+        } else if (type == kCGEventLeftMouseDown || type == kCGEventRightMouseDown || type == kCGEventOtherMouseDown) {
+            // ⌃⇧-click (any button) or drag: the modifiers were for the click, so releasing them isn't the ⌃⇧ hotkey
+            _lastFlag = 0;
+            if (_flag & MODIFIER_FLAGS) _modifierChordUsed = true;
+        } else if (type == kCGEventFlagsChanged && _modifierChordUsed) {
+            // the modifiers held went with a click or another key: no modifier-only hotkey until all are released
+            // (⌃⌥⇧-click, then letting go of ⌥ and ⇧ one by one, must not switch)
+            _lastFlag = 0;
+            if (!(_flag & MODIFIER_FLAGS)) _modifierChordUsed = false;
         } else if (type == kCGEventFlagsChanged) {
             if (_lastFlag == 0 || _lastFlag < _flag) {
                 _lastFlag = _flag;
             } else if (_lastFlag > _flag)  {
                 //check switch
-                if (checkHotKey(vSwitchKeyStatus, GET_SWITCH_KEY(vSwitchKeyStatus) != 0xFE)) {
+                if (checkHotKey(vSwitchKeyStatus, _lastFlag, GET_SWITCH_KEY(vSwitchKeyStatus) != 0xFE)) {
                     _lastFlag = 0;
                     switchLanguage();
                     _hasJustUsedHotKey = true;
@@ -1360,7 +1378,7 @@ static NSTimer* _watchdog = nil;
     if (_eventTap) return YES;
     if (!_inited) { VikeyInit(); _inited = YES; }
     CGEventMask mask = (1 << kCGEventKeyDown) | (1 << kCGEventKeyUp) | (1 << kCGEventFlagsChanged) |
-                       (1 << kCGEventLeftMouseDown) | (1 << kCGEventRightMouseDown);
+                       (1 << kCGEventLeftMouseDown) | (1 << kCGEventRightMouseDown) | (1 << kCGEventOtherMouseDown);
     _eventTap = CGEventTapCreate(kCGSessionEventTap, kCGHeadInsertEventTap, kCGEventTapOptionDefault, mask, VikeyEventCallback, NULL);
     if (!_eventTap) return NO;
     _runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, _eventTap, 0);
@@ -1435,6 +1453,13 @@ static NSTimer* _watchdog = nil;
 
 + (void)setEmojiHotkeyHandler:(void (^)(void))handler { vEmojiHandler = [handler copy]; }
 + (void)setEmojiPickerOpen:(BOOL)open { vEmojiOpen = open; }
+
++ (int)hotkeyKeyCodeForEvent:(NSEvent *)event {
+    // the tap matches hotkeys against the key code mapped back to QWERTY (Dvorak, AZERTY...): record the same
+    int code = event.keyCode;
+    if (vPerformLayoutCompat) code = ConvertKeyStringToKeyCode(event.charactersIgnoringModifiers, code);
+    return code;
+}
 
 + (void)resetTyping {
     ResetEnglishWord(true);
