@@ -93,3 +93,24 @@ final class SystemKeyboardGeometryTests: XCTestCase {
         near(bottom.first!.frame.width, 48, "123 width"); near(bottom.last!.frame.minX, 331.33, "return x"); near(bottom.last!.frame.width, 102.33, "return width")
     }
 }
+
+/// The brand on the right of an empty suggestion strip (Tony). Renders only.
+final class StripBrandTests: XCTestCase {
+    func testRenderEmptyAndFullStrip() {
+        KeyboardView.barOn = true
+        KeyboardView.langStyle = 1
+        for dark in [false, true] {
+            for (name, s) in [("empty", [Suggestion]()), ("words", [Suggestion(text: "tooi", quoted: true), Suggestion(text: "tôi", highlighted: true), Suggestion(text: "tối")])] {
+                let kb = KeyboardView(frame: CGRect(x: 0, y: 0, width: 402, height: KeyboardView.keyboardHeight(compactHeight: false)))
+                kb.dark = dark
+                kb.languageShort = "VI"; kb.languageTitle = "Tiếng Việt"
+                kb.backgroundColor = dark ? UIColor(white: 0.17, alpha: 1) : UIColor(red: 0.82, green: 0.83, blue: 0.86, alpha: 1)
+                kb.suggestions = s
+                kb.layoutIfNeeded()
+                let img = UIGraphicsImageRenderer(bounds: kb.bounds).image { ctx in kb.layer.render(in: ctx.cgContext) }
+                try? FileManager.default.createDirectory(atPath: "/tmp/claude-501/layouts", withIntermediateDirectories: true)
+                try? img.pngData()?.write(to: URL(fileURLWithPath: "/tmp/claude-501/layouts/brand_\(name)_\(dark ? "dark" : "light").png"))
+            }
+        }
+    }
+}

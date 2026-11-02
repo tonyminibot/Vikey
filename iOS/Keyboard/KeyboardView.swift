@@ -766,9 +766,24 @@ final class SuggestionBar: UIView {
     private var cells: [UIButton] = []
     private var lines: [UIView] = []
     private var items: [Suggestion] = []
+    /// The brand on the right of an empty strip (Tony): the icon and the wordmark, as in the Mac emoji panel.
+    private let mark = UIView()
+    private let markIcon = UILabel()
+    private let markText = UILabel()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
+        markIcon.text = "Vi"
+        markIcon.font = .systemFont(ofSize: 10, weight: .bold)
+        markIcon.textColor = .white
+        markIcon.textAlignment = .center
+        markIcon.layer.cornerRadius = 5
+        markIcon.layer.cornerCurve = .continuous
+        markIcon.layer.masksToBounds = true
+        mark.addSubview(markIcon); mark.addSubview(markText)
+        mark.isUserInteractionEnabled = false
+        mark.isAccessibilityElement = false
+        addSubview(mark)
         for i in 0..<3 {
             let b = UIButton(type: .custom)
             b.tag = i
@@ -790,6 +805,12 @@ final class SuggestionBar: UIView {
 
     private func restyle() {
         let fg: UIColor = dark ? .white : .black
+        let indigo: UIColor = dark ? UIColor(red: 0.549, green: 0.529, blue: 1, alpha: 1) : UIColor(red: 0.310, green: 0.275, blue: 0.898, alpha: 1)
+        markIcon.backgroundColor = UIColor(red: 0.310, green: 0.275, blue: 0.898, alpha: 1)   // the app icon's indigo in both modes
+        let word = NSMutableAttributedString(string: "Vi", attributes: [.font: UIFont.systemFont(ofSize: 15, weight: .bold), .foregroundColor: fg])
+        word.append(NSAttributedString(string: "key", attributes: [.font: UIFont.systemFont(ofSize: 15, weight: .bold), .foregroundColor: indigo]))
+        markText.attributedText = word
+        mark.isHidden = !items.isEmpty   // only on an empty strip
         for (i, b) in cells.enumerated() {
             let it = i < items.count ? items[i] : nil
             let title: String? = it.map {
@@ -815,6 +836,12 @@ final class SuggestionBar: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
+        markText.sizeToFit()
+        let iconSide: CGFloat = 18, gap: CGFloat = 6
+        let mw = iconSide + gap + markText.bounds.width
+        mark.frame = CGRect(x: bounds.width - 14 - mw, y: (bounds.height - iconSide) / 2, width: mw, height: iconSide)
+        markIcon.frame = CGRect(x: 0, y: 0, width: iconSide, height: iconSide)
+        markText.frame = CGRect(x: iconSide + gap, y: (iconSide - markText.bounds.height) / 2, width: markText.bounds.width, height: markText.bounds.height)
         // one wide cell for a single action (✨ Proofread, ↩︎ Undo, "working…"); three otherwise
         if items.count == 1, items[0].kind != .word, items[0].kind != .next {
             cells[0].frame = bounds.insetBy(dx: 2, dy: 2)
