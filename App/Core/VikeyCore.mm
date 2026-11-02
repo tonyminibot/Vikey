@@ -311,6 +311,13 @@ extern "C" {
     // menu bar) overrides it for one app. A choice equal to the default is not stored.
     static NSString* const kAutoSwitchPerApp = @"AutoSwitchPerApp";
 
+    static NSString* NormalizedAutoSwitchApp(NSString* app) {
+        if ([app hasPrefix:@"com.riotgames.LeagueofLegends"] || [app hasPrefix:@"com.riotgames.leagueoflegends"]) {
+            return @"com.riotgames.LeagueofLegends";
+        }
+        return app;
+    }
+
     static int AutoSwitchGlobal() {
         id on = [[NSUserDefaults standardUserDefaults] objectForKey:@"AutoSwitchByTyping"];
         return on == nil ? 1 : ([on intValue] ? 1 : 0);
@@ -318,7 +325,29 @@ extern "C" {
 
     static int AutoSwitchForApp(NSString* app) {
         if (app.length > 0) {
-            NSNumber* own = [[NSUserDefaults standardUserDefaults] dictionaryForKey:kAutoSwitchPerApp][app];
+            NSString* norm = NormalizedAutoSwitchApp(app);
+            NSDictionary* dict = [[NSUserDefaults standardUserDefaults] dictionaryForKey:kAutoSwitchPerApp];
+            NSNumber* own = dict[norm];
+            if (own == nil && [norm isEqualToString:@"com.riotgames.LeagueofLegends"]) {
+                for (NSString* key in dict) {
+                    if ([key hasPrefix:@"com.riotgames.LeagueofLegends"] || [key hasPrefix:@"com.riotgames.leagueoflegends"]) {
+                        own = dict[key];
+                        break;
+                    }
+                }
+                if (own != nil) {
+                    NSMutableDictionary* m = [dict mutableCopy];
+                    for (NSString* key in [dict allKeys]) {
+                        if ([key hasPrefix:@"com.riotgames.LeagueofLegends"] || [key hasPrefix:@"com.riotgames.leagueoflegends"]) {
+                            [m removeObjectForKey:key];
+                        }
+                    }
+                    m[norm] = own;
+                    [[NSUserDefaults standardUserDefaults] setObject:m forKey:kAutoSwitchPerApp];
+                }
+            } else if (own == nil) {
+                own = dict[app];
+            }
             if (own != nil) return [own intValue] ? 1 : 0;
         }
         return AutoSwitchGlobal();
@@ -361,9 +390,29 @@ extern "C" {
     void VKSetAutoSwitchForFrontApp(int on) {
         NSString* app = _frontMostApp;
         if (app.length == 0) return;
+        NSString* norm = NormalizedAutoSwitchApp(app);
         NSUserDefaults* d = [NSUserDefaults standardUserDefaults];
         NSMutableDictionary* m = [[d dictionaryForKey:kAutoSwitchPerApp] mutableCopy] ?: [NSMutableDictionary dictionary];
-        if ((on ? 1 : 0) == AutoSwitchGlobal()) [m removeObjectForKey:app]; else m[app] = @(on ? 1 : 0);
+        if ((on ? 1 : 0) == AutoSwitchGlobal()) {
+            [m removeObjectForKey:norm];
+            [m removeObjectForKey:app];
+            if ([norm isEqualToString:@"com.riotgames.LeagueofLegends"]) {
+                for (NSString* key in [m allKeys]) {
+                    if ([key hasPrefix:@"com.riotgames.LeagueofLegends"] || [key hasPrefix:@"com.riotgames.leagueoflegends"]) {
+                        [m removeObjectForKey:key];
+                    }
+                }
+            }
+        } else {
+            if ([norm isEqualToString:@"com.riotgames.LeagueofLegends"]) {
+                for (NSString* key in [m allKeys]) {
+                    if ([key hasPrefix:@"com.riotgames.LeagueofLegends"] || [key hasPrefix:@"com.riotgames.leagueoflegends"]) {
+                        [m removeObjectForKey:key];
+                    }
+                }
+            }
+            m[norm] = @(on ? 1 : 0);
+        }
         [d setObject:m forKey:kAutoSwitchPerApp];
         if (!AutoSwitchPaused()) vAutoSwitchByTyping = AutoSwitchForApp(app);
         StartEnglishWord(false);   // the word being typed now wasn't followed from its start
