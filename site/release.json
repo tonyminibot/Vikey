@@ -46,8 +46,8 @@
 "app_store_url": "https://apps.apple.com/app/id6827958793"
 },
 "android": {
-"version": "1.0.26",
-"download_url": "/downloads/Vikey-1.0.26.apk",
-"sha256": "dacd1fc1647c178025a20f10b5a1836b8798f8eeea7e397bde289e1fa74b3b4f"
+"version": "1.0.31",
+"download_url": "/downloads/Vikey-1.0.31.apk",
+"sha256": "523e25b6e659bab049de94e5792f2a2d75024dacd15aea4bbf4b04c1cd464eb9"
 }
 }
