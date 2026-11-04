@@ -52,6 +52,10 @@ static std::string utf8(const std::u32string& w) { std::string o; for (char32_t 
 // one that never does uses pre-edit.
 static bool _surroundingSeen = false;      // the focused app has sent its surrounding text since focus_in
 static std::u32string _pre;                // pre-edit text not committed yet
+// Characters before the cursor in the last text the app reported. Mutter turns delete_surrounding_text into bytes
+// against that same snapshot and aborts GNOME Shell (g_assert in meta_wayland_text_input_focus_delete_surrounding)
+// when asked to delete more than it holds, so a delete is never longer than this.
+static guint _surroundingBefore = 0;
 static bool preeditMode() {
     if (!_active || !(_active->caps & IBUS_CAP_PREEDIT_TEXT)) return false;
     return !(_active->caps & IBUS_CAP_SURROUNDING_TEXT) || !_surroundingSeen;
@@ -80,7 +84,10 @@ static void outBackspaces(int n) {
         int k = std::min<int>(n, (int)_pre.size()); _pre.erase(_pre.size() - k); n -= k; showPre();
         if (n <= 0) return;   // more than the pre-edit holds: the app has to delete committed text (rare; best effort below)
     }
-    if (_active->caps & IBUS_CAP_SURROUNDING_TEXT) ibus_engine_delete_surrounding_text(IBUS_ENGINE(_active), -n, n);
+    if (_active->caps & IBUS_CAP_SURROUNDING_TEXT) {
+        n = std::min<int>(n, (int)_surroundingBefore);
+        if (n > 0) ibus_engine_delete_surrounding_text(IBUS_ENGINE(_active), -n, n);
+    }
     else for (int i = 0; i < n; i++) { ibus_engine_forward_key_event(IBUS_ENGINE(_active), IBUS_KEY_BackSpace, 14, 0); ibus_engine_forward_key_event(IBUS_ENGINE(_active), IBUS_KEY_BackSpace, 14, IBUS_RELEASE_MASK); }
 }
 static void outText(const std::u32string& t) {
@@ -244,7 +251,7 @@ static gboolean vikey_process_key_event(IBusEngine* engine, guint keyval, guint 
     return consumed ? TRUE : FALSE;
 }
 static void vikey_focus_in(IBusEngine* engine) {
-    VikeyEngine* e = (VikeyEngine*)engine; _active = e; _surroundingSeen = false; _pre.clear();
+    VikeyEngine* e = (VikeyEngine*)engine; _active = e; _surroundingSeen = false; _surroundingBefore = 0; _pre.clear();
     ibus_engine_get_surrounding_text(engine, nullptr, nullptr, nullptr);   // asks this field to send its text (apps that can, do)
     ibus_engine_register_properties(engine, e->props);
     e->shown = 0;   // the panel took the list again: send everything once
@@ -260,6 +267,7 @@ static void vikey_enable(IBusEngine* engine) { VikeyEngine* e = (VikeyEngine*)en
 static void vikey_disable(IBusEngine* engine) { ((VikeyEngine*)engine)->enabled = FALSE; core::flushTypingLog(); }
 static void vikey_set_capabilities(IBusEngine* engine, guint caps) { ((VikeyEngine*)engine)->caps = caps; }
 static void vikey_set_surrounding_text(IBusEngine* engine, IBusText* text, guint cursor, guint anchor) {
+    if ((VikeyEngine*)engine == _active) _surroundingBefore = cursor;
     if ((VikeyEngine*)engine == _active && !_surroundingSeen) { flushPre(); _surroundingSeen = true; }   // the app reports its text: direct mode from now on
     if (_parentClass && _parentClass->set_surrounding_text) _parentClass->set_surrounding_text(engine, text, cursor, anchor);
 }
