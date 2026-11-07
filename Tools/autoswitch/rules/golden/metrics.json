@@ -1,14 +1,14 @@
 {
  "chat": {
-  "manual": 61,
+  "manual": 58,
   "wrong": 1
  },
  "chat_typos": {
-  "manual": 74,
+  "manual": 71,
   "wrong": 7
  },
  "synthetic": {
-  "manual": 120,
+  "manual": 111,
   "wrong": 9
  }
 }

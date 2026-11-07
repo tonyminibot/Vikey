@@ -975,3 +975,15 @@ Word recording can be turned off in the log window. Nothing leaves the Mac; Tony
 **Cause.** macOS disables the event tap when it times out or on user input (a slow Mac, secure input), and the app never turned it back on.
 
 **Fix.** Re-enable the tap when macOS reports it was disabled. A 2-second watchdog also re-enables it if needed.
+
+### Literal restoration after Telex transformations
+
+At a word boundary, restore the complete typed spelling when it is a
+recognized English word, including cases where the shortened spelling is
+also recognized. Internal case boundaries and separated vowel groups can
+provide structural evidence for an unlisted literal. Explicit Telex
+modifiers continue to protect unlisted Vietnamese syllables.
+
+Restoration based solely on the new unlisted-literal evidence applies to
+the current word. Existing spelling-based restoration retains its lookback
+behavior.
