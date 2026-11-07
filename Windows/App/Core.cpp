@@ -19,7 +19,7 @@
 int vLanguage = 1, vSwitchKeyStatus = 0x7A000206, vCheckSpelling = 1, vUseModernOrthography = 1;
 int vRestoreIfWrongSpelling = 1, vFixRecommendBrowser = 1, vUseSmartSwitchKey = 1, vOtherLanguage = 1;
 int vAutoSwitchByTyping = 1, vPerformLayoutCompat = 0;
-// Emoji picker (Settings.cpp): its hotkey (0 = off); while it is open keys go to the picker, not the engine
+// Emoji picker (Settings.cpp): its hotkey (0 = off); while it is open keys go to the picker, not the engine (Windows' own shortcuts and media keys excepted)
 static int vEmojiHotkey = 0;
 static volatile bool vEmojiOpen = false;
 static HWND vEmojiWindow = nullptr;
@@ -368,6 +368,15 @@ void setLanguageObserver(std::function<void(int)> f) { _observer = f; }
 static std::function<void()> _emojiHandler;
 void setEmojiHotkeyHandler(std::function<void()> f) { _emojiHandler = f; }
 void setEmojiPickerOpen(bool open, HWND picker) { vEmojiWindow = picker; vEmojiOpen = open; }
+/// Windows' own shortcuts while the picker is open: Win+D, Alt+Tab, Alt+F4, Ctrl+Esc (Alt+Backspace deletes a search
+/// word, Ctrl+Alt is AltGr). The picker keeps every other key, like the Mac's panel.
+static bool windowsShortcut(DWORD vk, unsigned flag) {
+    if (flag & F_WIN) return true;
+    if (flag & F_ALT) return !(flag & F_CONTROL) && vk != VK_BACK;
+    return vk == VK_ESCAPE && (flag & F_CONTROL);
+}
+/// Volume, media, browser and launch keys, PrintScreen: they go on and the picker stays open.
+static bool deviceKey(DWORD vk) { return vk == VK_SNAPSHOT || (vk >= VK_BROWSER_BACK && vk <= VK_LAUNCH_APP2); }
 void resetTyping() { ResetEnglishWord(true); _autoFixUndo.active = false; startNewSession(); }
 void insertText(const std::wstring& text) {
     resetTyping();
@@ -541,12 +550,12 @@ static LRESULT CALLBACK keyboardHook(int nCode, WPARAM wParam, LPARAM lParam) {
         if (_emojiHandler) _emojiHandler();
         return 1;
     }
-    // while open, the picker reads the keys for its search (it does its own Telex reading); the app in front keeps
+    // while open, the picker reads the keys it uses for its search (it does its own Telex reading); the app in front keeps
     // its cursor. Characters sent by other tools (VK_PACKET) go to it as characters.
     if (vEmojiOpen && vEmojiWindow) {
-        if (k->vkCode == VK_PACKET) PostMessageW(vEmojiWindow, WM_APP + 12, k->scanCode, 0);
-        else PostMessageW(vEmojiWindow, WM_APP + 10, k->vkCode, (LPARAM)_flag);
-        return 1;
+        if (k->vkCode == VK_PACKET) { PostMessageW(vEmojiWindow, WM_APP + 12, k->scanCode, 0); return 1; }
+        if (windowsShortcut(k->vkCode, _flag)) { vEmojiOpen = false; PostMessageW(vEmojiWindow, WM_APP + 11, 0, 0); }   // closes it (closed now: the next key goes to the app) and goes on as usual
+        else if (!deviceKey(k->vkCode)) { PostMessageW(vEmojiWindow, WM_APP + 10, k->vkCode, (LPARAM)_flag); return 1; }
     }
     if (_keycode == KEY_EMPTY) {   // F-keys, media keys...: not ours. A key typing a character still ends the word.
         _lastFlag = 0;   // Ctrl+Shift+F5, Ctrl+Shift+numpad +: releasing Ctrl+Shift afterwards isn't the hotkey
