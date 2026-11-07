@@ -220,16 +220,16 @@ static gboolean vikey_process_key_event(IBusEngine* engine, guint keyval, guint 
         if (bit && core::modifier(bit, !release)) { updateLangProp(e); return TRUE; }
         return FALSE;
     }
-    if (release) return FALSE;
+    if (release) { core::keyUp(engineKey(keyval).key); return FALSE; }
     // a password/PIN field (the app's input purpose, sent on every focus in): keys go through as typed, like macOS
     // secure input: no Telex, no auto switch, and the core never sees them, so the typing log can't record them
     guint purpose = 0, hints = 0; ibus_engine_get_content_type(engine, &purpose, &hints);
-    if (purpose == IBUS_INPUT_PURPOSE_PASSWORD || purpose == IBUS_INPUT_PURPOSE_PIN) { flushPre(); return FALSE; }
+    if (purpose == IBUS_INPUT_PURPOSE_PASSWORD || purpose == IBUS_INPUT_PURPOSE_PIN) { core::otherKeyDown(); flushPre(); return FALSE; }
     if (_appPending) { _appPending = false; std::string app = frontAppX11(); if (!app.empty() && app != core::frontApp()) core::focusChanged(app); }
     MappedKey m = engineKey(keyval);
     // a key we don't model: one that types a character (KP_Add, EuroSign...) ends the word, or the next letter would
     // join the word before it ("a", KP_Add, "a" gave "aâ"); F-keys and media keys don't
-    if (m.key == KEY_EMPTY) { flushPre(); if (g_unichar_isprint(ibus_keyval_to_unicode(keyval))) core::click(); return FALSE; }
+    if (m.key == KEY_EMPTY) { core::otherKeyDown(); flushPre(); if (g_unichar_isprint(ibus_keyval_to_unicode(keyval))) core::click(); return FALSE; }
     unsigned flags = flagsOf(state);
     _keyval = keyval; _keyHw = keycode; _keyState = state;
     bool consumed = core::keyDown(m.key, m.shift || (flags & core::F_SHIFT), flags);

@@ -52,6 +52,8 @@ static HHOOK _kbHook = nullptr, _mouseHook = nullptr;
 static HWINEVENTHOOK _focusHook = nullptr, _fgHook = nullptr;
 static vKeyHookState* pData = nullptr;
 static unsigned _flag = 0, _lastFlag = 0;
+static bool _modifierChordUsed = false;   // the modifiers held went with a click or another key: no modifier-only hotkey until all are released
+static DWORD _hotkeyVk = 0;               // the hotkey's key while it is down (with or without its modifiers): the LL hook has no repeat flag, so key-downs before its key-up are auto-repeat
 static Uint16 _keycode = 0;
 static DWORD _keyVk = 0, _keyExtended = 0;   // the key as Windows sent it: re-sent as is after a restore (Home, numpad 1...)
 static bool _hasJustUsedHotKey = false;
@@ -333,15 +335,19 @@ static void SendEngineOutput() {
 }
 
 // ---- Hotkey ------------------------------------------------------------------------------
-static bool checkHotKey(int hotKeyData, bool checkKeyCode = true) {
+/// flags: for a key hotkey (Alt+Z) the key press's own, so Alt held and Z again switches again; for modifiers
+/// alone (Ctrl+Shift) the most modifiers held before the release
+static bool checkHotKey(int hotKeyData, unsigned flags, bool checkKeyCode = true) {
     if ((hotKeyData & (~0x8000)) == EMPTY_HOTKEY) return false;
-    if (HAS_CONTROL(hotKeyData) ^ GET_BOOL(_lastFlag & F_CONTROL)) return false;
-    if (HAS_OPTION(hotKeyData) ^ GET_BOOL(_lastFlag & F_ALT)) return false;
-    if (HAS_COMMAND(hotKeyData) ^ GET_BOOL(_lastFlag & F_WIN)) return false;
-    if (HAS_SHIFT(hotKeyData) ^ GET_BOOL(_lastFlag & F_SHIFT)) return false;
+    if (HAS_CONTROL(hotKeyData) ^ GET_BOOL(flags & F_CONTROL)) return false;
+    if (HAS_OPTION(hotKeyData) ^ GET_BOOL(flags & F_ALT)) return false;
+    if (HAS_COMMAND(hotKeyData) ^ GET_BOOL(flags & F_WIN)) return false;
+    if (HAS_SHIFT(hotKeyData) ^ GET_BOOL(flags & F_SHIFT)) return false;
     if (checkKeyCode && GET_SWITCH_KEY(hotKeyData) != _keycode) return false;
     return true;
 }
+// a key or click with modifiers held: releasing them afterwards isn't the modifier-only hotkey
+static void cancelModifierHotkey() { _lastFlag = 0; if (_flag & (F_SHIFT | F_CONTROL | F_ALT | F_WIN)) _modifierChordUsed = true; }
 static void switchLanguage(const char* via) {
     PauseAutoSwitchAfterManual();
     _autoFixUndo.active = false;
@@ -520,17 +526,20 @@ static LRESULT CALLBACK keyboardHook(int nCode, WPARAM wParam, LPARAM lParam) {
 
     // modifier keys: track them, and detect a modifiers-only hotkey on release
     if (modifierVk(k->vkCode, down)) {
-        if (_lastFlag == 0 || _lastFlag < _flag) _lastFlag = _flag;
+        if (_modifierChordUsed) {   // Ctrl+Alt+Shift-click, then letting go of Alt and Shift one by one, must not switch
+            _lastFlag = 0;
+            if (!(_flag & (F_SHIFT | F_CONTROL | F_ALT | F_WIN))) _modifierChordUsed = false;
+        } else if (_lastFlag == 0 || _lastFlag < _flag) _lastFlag = _flag;
         else if (_lastFlag > _flag) {
             // only a hotkey without a key (a key hotkey fired on its key-down; _keycode is just the last key typed, so
             // Alt+Z, then Alt alone, flipped back). The key-up goes on: a swallowed one leaves the modifier held down.
-            bool hit = GET_SWITCH_KEY(vSwitchKeyStatus) == 0xFE && checkHotKey(vSwitchKeyStatus, false);
+            bool hit = GET_SWITCH_KEY(vSwitchKeyStatus) == 0xFE && checkHotKey(vSwitchKeyStatus, _lastFlag, false);
             _lastFlag = 0; _hasJustUsedHotKey = hit;
             if (hit) switchLanguage("hotkey");
         }
         return CallNextHookEx(_kbHook, nCode, wParam, lParam);
     }
-    if (!down) return CallNextHookEx(_kbHook, nCode, wParam, lParam);
+    if (!down) { if (k->vkCode == _hotkeyVk) _hotkeyVk = 0; return CallNextHookEx(_kbHook, nCode, wParam, lParam); }
 
     _keycode = engineKey(k->vkCode);
     _keyVk = k->vkCode; _keyExtended = (k->flags & LLKHF_EXTENDED) ? KEYEVENTF_EXTENDEDKEY : 0;
@@ -538,6 +547,7 @@ static LRESULT CALLBACK keyboardHook(int nCode, WPARAM wParam, LPARAM lParam) {
     if (vEmojiHotkey && GET_SWITCH_KEY(vEmojiHotkey) == _keycode &&
         HAS_CONTROL(vEmojiHotkey) == GET_BOOL(_flag & F_CONTROL) && HAS_OPTION(vEmojiHotkey) == GET_BOOL(_flag & F_ALT) &&
         HAS_COMMAND(vEmojiHotkey) == GET_BOOL(_flag & F_WIN) && HAS_SHIFT(vEmojiHotkey) == GET_BOOL(_flag & F_SHIFT)) {
+        cancelModifierHotkey();   // Ctrl+Shift+E: releasing Ctrl+Shift afterwards isn't the Ctrl+Shift hotkey
         if (_emojiHandler) _emojiHandler();
         return 1;
     }
@@ -549,19 +559,26 @@ static LRESULT CALLBACK keyboardHook(int nCode, WPARAM wParam, LPARAM lParam) {
         return 1;
     }
     if (_keycode == KEY_EMPTY) {   // F-keys, media keys...: not ours. A key typing a character still ends the word.
-        _lastFlag = 0;   // Ctrl+Shift+F5, Ctrl+Shift+numpad +: releasing Ctrl+Shift afterwards isn't the hotkey
+        cancelModifierHotkey();   // Ctrl+Shift+F5, Ctrl+Shift+numpad +: releasing Ctrl+Shift afterwards isn't the hotkey
         if (unmodeledKeyEndsWord(k->vkCode)) { TLEndWord("other"); resetTyping(); }
         return CallNextHookEx(_kbHook, nCode, wParam, lParam);
     }
 
-    // switch language hotkey
-    if (GET_SWITCH_KEY(vSwitchKeyStatus) != _keycode) _lastFlag = 0;
-    else if (checkHotKey(vSwitchKeyStatus, GET_SWITCH_KEY(vSwitchKeyStatus) != 0xFE)) { switchLanguage("hotkey"); _lastFlag = 0; _hasJustUsedHotKey = true; return 1; }
-    _hasJustUsedHotKey = _lastFlag != 0;
+    // a password field gets the keys exactly as typed, in both languages: no switch hotkey (Shift+Z types Z, as under the
+    // Mac's secure input and Linux's password purpose), no Telex, no auto switch, no Backspace undo (also right after a
+    // focus change, until the field has been checked)
+    if (site::focusedIsPassword()) { cancelModifierHotkey(); _hotkeyVk = 0; resetTyping(); return CallNextHookEx(_kbHook, nCode, wParam, lParam); }
 
-    // a password field gets the keys exactly as typed, in both languages: no Telex, no auto switch, no Backspace undo (also
-    // right after a focus change, until the field has been checked)
-    if (site::focusedIsPassword()) { resetTyping(); return CallNextHookEx(_kbHook, nCode, wParam, lParam); }
+    // switch language hotkey
+    if (GET_SWITCH_KEY(vSwitchKeyStatus) != _keycode) { cancelModifierHotkey(); _hotkeyVk = 0; }
+    else {
+        bool repeat = k->vkCode == _hotkeyVk; _hotkeyVk = k->vkCode;   // any press, matched or not: Alt+Shift+Z, then Shift up, mustn't switch on a repeat (the Mac's autorepeat flag)
+        if (checkHotKey(vSwitchKeyStatus, _flag, GET_SWITCH_KEY(vSwitchKeyStatus) != 0xFE)) {
+            if (repeat) return 1;   // holding Alt+Z: switch once per press, swallow the auto-repeat
+            switchLanguage("hotkey"); _lastFlag = 0; _hasJustUsedHotKey = true; return 1;
+        }
+    }
+    _hasJustUsedHotKey = _lastFlag != 0;
 
     // Backspace right after an automatic correction undoes it
     if (_keycode == KEY_DELETE && _autoFixUndo.active && !(OTHER_CONTROL_KEY)) { if (UndoAutoFixWithBackspace()) return 1; }
@@ -594,6 +611,8 @@ static LRESULT CALLBACK mouseHook(int nCode, WPARAM wParam, LPARAM lParam) {
             RECT r; GetWindowRect(vEmojiWindow, &r); POINT p = ((MSLLHOOKSTRUCT*)lParam)->pt;
             if (!PtInRect(&r, p)) PostMessageW(vEmojiWindow, WM_APP + 11, 0, 0);
         }
+        cancelModifierHotkey();   // Ctrl+Shift-click: the modifiers were for the click, so releasing them isn't the Ctrl+Shift hotkey
+        _hotkeyVk = 0;   // a missed key-up (focus change, lock screen) must not swallow the next Alt+Z
         _autoFixUndo.active = false; TLNoteClick();
         if (vLanguage == 0) ResetEnglishWord(true);
         else vKeyHandleEvent(vKeyEvent::Mouse, vKeyEventState::MouseDown, 0);
@@ -601,7 +620,7 @@ static LRESULT CALLBACK mouseHook(int nCode, WPARAM wParam, LPARAM lParam) {
     return CallNextHookEx(_mouseHook, nCode, wParam, lParam);
 }
 
-static VOID CALLBACK foregroundHook(HWINEVENTHOOK, DWORD, HWND, LONG, LONG, DWORD, DWORD) { updateOtherInputLanguage(); onForegroundChanged(); }
+static VOID CALLBACK foregroundHook(HWINEVENTHOOK, DWORD, HWND, LONG, LONG, DWORD, DWORD) { _hotkeyVk = 0; updateOtherInputLanguage(); onForegroundChanged(); }
 
 bool start() {
     if (_kbHook) return true;
