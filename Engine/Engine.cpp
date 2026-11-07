@@ -1866,6 +1866,7 @@ struct AsEngineState {
     bool tempDisable, useSpellingBefore, wordStartOk, statesLost;
     int dropN; int dropPos[AS_MAX_DROPS]; Uint32 dropKey[AS_MAX_DROPS];
     int spaceCount, checkSpelling, language;
+    Uint32 doubleKeys[MAX_BUFF]; int doubleCount, doubleFirst; bool doubleBoth;   //a replay's doubled key mustn't replace the word's (keyboard lookups: "Terrible" -> "terrible")
     vector<Uint32> longWord, special, statesData;
     list<vector<Uint32>> typing;
     vKeyHookState hook;
@@ -1880,6 +1881,7 @@ static void asSaveState(AsEngineState& st) {
     st.dropN = _asDropN; memcpy(st.dropPos, _asDropPos, sizeof(_asDropPos)); memcpy(st.dropKey, _asDropKey, sizeof(_asDropKey));
     st.spaceCount = _spaceCount; st.checkSpelling = vCheckSpelling;
     st.language = vLanguage;
+    memcpy(st.doubleKeys, _asDoubleKeys, sizeof(_asDoubleKeys)); st.doubleCount = _asDoubleCount; st.doubleFirst = _asDoubleFirst; st.doubleBoth = _asDoubleBoth;
     st.longWord.swap(_longWordHelper);
     st.special.swap(_specialChar);
     st.statesData.swap(_typingStatesData);
@@ -1896,6 +1898,7 @@ static void asRestoreState(AsEngineState& st) {
     _asDropN = st.dropN; memcpy(_asDropPos, st.dropPos, sizeof(_asDropPos)); memcpy(_asDropKey, st.dropKey, sizeof(_asDropKey));
     _spaceCount = st.spaceCount; vCheckSpelling = st.checkSpelling;
     vLanguage = st.language;
+    memcpy(_asDoubleKeys, st.doubleKeys, sizeof(_asDoubleKeys)); _asDoubleCount = st.doubleCount; _asDoubleFirst = st.doubleFirst; _asDoubleBoth = st.doubleBoth;
     _longWordHelper.swap(st.longWord);
     _specialChar.swap(st.special);
     _typingStatesData.swap(st.statesData);
