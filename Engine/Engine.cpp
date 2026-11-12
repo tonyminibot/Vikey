@@ -201,6 +201,27 @@ static bool asTeencodeVowels(const int& from, const int& to) {
     return plainA && plainB && ((a == KEY_I && b == KEY_E) || (a == KEY_O && b == KEY_Y && (!mark || mark == MARK2_MASK)));
 }
 
+/** A stretched ending (D63): "thèmmmm", "gòyyyy", "ỏoooo". Where the run of minRun+ same letters at the end of the
+ *  word starts, or -1. Same letter, same ^ / ˘ ˀ (so the "ưu" of "cứu" is no run); only its first letter may have a tone.
+ *  Only letters that can end a syllable: never the Telex keys s f r x j w z d, so doubled tone keys (D5.1, D19) stay. */
+static int asStretchStart(const int& minRun) {
+    if (_index < 2 || _index >= MAX_BUFF || _statesLost) return -1;
+    const Uint32 odd = MARK_MASK | STANDALONE_MASK | CHAR_CODE_MASK;
+    Uint32 last = TypingWord[_index - 1];
+    Uint16 key = CHR(_index - 1);
+    if (last & odd) return -1;
+    if (!(key == KEY_A || key == KEY_E || key == KEY_I || key == KEY_O || key == KEY_U || key == KEY_Y || key == KEY_C ||
+          key == KEY_G || key == KEY_H || key == KEY_M || key == KEY_N || key == KEY_P || key == KEY_T)) return -1;
+    Uint32 shape = last & (TONE_MASK | TONEW_MASK);
+    int s = _index - 1;
+    while (s > 0 && CHR(s - 1) == key && (TypingWord[s - 1] & (TONE_MASK | TONEW_MASK)) == shape &&
+           !(TypingWord[s - 1] & (STANDALONE_MASK | CHAR_CODE_MASK))) {
+        s--;
+        if (TypingWord[s] & MARK_MASK) break;   //the toned letter starts the run
+    }
+    return s <= _index - minRun ? s : -1;
+}
+
 void checkSpelling(const bool& forceCheckVowel=false) {
     _teenRule = false;
     _spellingOK = false;
@@ -828,7 +849,17 @@ void insertMark(const Uint32& markMask, const bool& canModifyFlag) {
     
     findAndCalculateVowel();
     VWSM = 0;
-    
+    //a stretched ending ("gòyyy", "củaaa", "gìiii", D63) is no part of the word here: the syllable alone decides
+    //where the tone goes (the letter after it is no end consonant); the whole word is sent after
+    int stretch = asStretchStart(2);   //from the 2nd copy, so the tone never jumps on the way
+    Byte whole = _index;
+    if (stretch >= 0 && stretch < VEI) {
+        VEI = stretch;
+        if (VSI > VEI) VSI = VEI;   //the run starts at the i of "gi"
+        vowelCount = VEI - VSI + 1;
+        _index = (Byte)(stretch + 1);
+    }
+
     //detect mark position
     if (vowelCount == 1) {
         VWSM = VEI;
@@ -845,7 +876,8 @@ void insertMark(const Uint32& markMask, const bool& canModifyFlag) {
         if (TypingWord[VEI] & TONE_MASK || TypingWord[VEI] & TONEW_MASK)
             vowelWillSetMark = VEI;
     }
-    
+    if (_index != whole) { _index = whole; hBPC = _index - VWSM; }
+
     //send data
     kk = _index - 1 - VSI;
     //if duplicate same mark -> restore
@@ -921,7 +953,7 @@ void insertAOE(const Uint16& data, const bool& isCaps) {
                 //restore and disable temporary
                 hCode = vRestore;
                 TypingWord[ii] &= ~TONE_MASK;
-                hData[_index - 1 - ii] = TypingWord[ii];
+                hData[_index - 1 - ii] = GET(TypingWord[ii]);   //may still carry a tone ("ổ" -> "ỏ"): a character, not a key code (D62)
                 //_index = 0;
                 if (data != KEY_O) //case thoòng
                     tempDisableKey = true;
@@ -1031,7 +1063,7 @@ void insertW(const Uint16& data, const bool& isCaps) {
                     } else {
                         hCode = vRestore;
                         TypingWord[ii] &= ~TONEW_MASK;
-                        hData[_index - 1 - ii] = TypingWord[ii];
+                        hData[_index - 1 - ii] = GET(TypingWord[ii]);   //may still carry a tone ("ở" -> "ỏ"), as above (D62)
                         isRestoredW = true;
                         //_index++;
                     }
@@ -1849,6 +1881,39 @@ static bool asShouldRestoreToEnglish(bool& literalOnly) {
     return true;
 }
 
+/** At the end of a word: a stretched Vietnamese word ("thèmmmm", "gòyyyy", "ỏoooo", D63). The word up to the first
+ *  stretched letter is a syllable, and the keys are no English word, neither as typed nor with the stretched letter
+ *  once ("testtt" is "test"). Such a word is not put back to its keys and doesn't switch to English.
+ *  2+ capitals keep the acronym rule (D23). */
+static bool asStretchedVietnamese() {
+    int s = asStretchStart(3);   //two are a slip ("khôngg" stays put back to its keys, D10), not a stretch
+    if (s < 0 || _stateIndex < 2 || _stateIndex < _index) return false;
+    Uint32 keys[MAX_BUFF];
+    int n = asStatesWithDrops(keys, MAX_BUFF - 1);   //with the keys Telex undid on the way ("cheese")
+    if (!asFewCapitals(keys, n)) return false;
+    asInitLetters();
+    char raw[AS_KEY_LEN];
+    if (!asRawWord(keys, n, raw) || asEnglishScore(raw) != AS_MISSING) return false;
+    int len = (int)strlen(raw);
+    while (len >= 2 && raw[len - 1] == raw[len - 2]) raw[--len] = 0;
+    int en = asEnglishScore(raw);
+    //the syllable before the stretch: spell check it alone and score it, then put the check of the whole word back
+    Byte whole = _index;
+    bool savedTemp = tempDisableKey;
+    _index = (Byte)(s + 1);
+    checkSpelling(true);
+    bool syllable = !tempDisableKey;
+    char word[AS_KEY_LEN];
+    bool transformed;
+    int vn = asWordKey(word, transformed) ? asVietnameseScore(word) : AS_MISSING;
+    _index = whole;
+    checkSpelling(true);
+    tempDisableKey = savedTemp;
+    if (!syllable) return false;
+    //once stretched, both: "testtt" is "test", "beennnn" is "bên". Decided as for any word that is both
+    return en == AS_MISSING || !(vn == AS_MISSING || (vn < AS_VN_FLOOR && en - vn >= AS_PREFER) || en - vn >= AS_VN_EXTREME);
+}
+
 /** Before a hyphen: a rare w-word ("ưi") starts an English compound ("Wi-Fi", D23). */
 static bool asHyphenRestore() {
     if (!asEnabled() || !_asWordStartOk || _stateIndex < 2 || _stateIndex < _index) return false;
@@ -2181,12 +2246,13 @@ void vKeyHandleEvent(const vKeyEvent& event,
         _asApostrophe = data == KEY_QUOTE && capsStatus != 1;
         //after a space the word was already checked at the space: a later ( . , etc. must not reach back over the space
         //("zẻo" space "(" gave "zzero(", D53; same as the hyphen in D52)
-        bool asSwitch = (asIsSwitchBreak(event, data, capsStatus, otherControlKey) && _spaceCount == 0 && asShouldRestoreToEnglish(literalOnly)) ||
+        bool stretched = asStretchedVietnamese();   //"thèmmmm," stays as it is (D63)
+        bool asSwitch = (!stretched && asIsSwitchBreak(event, data, capsStatus, otherControlKey) && _spaceCount == 0 && asShouldRestoreToEnglish(literalOnly)) ||
                         (data == KEY_MINUS && capsStatus != 1 && !otherControlKey && _spaceCount == 0 && asHyphenRestore());   //a hyphen after a space isn't part of the word ("wr -" gave "wr wr-", D52)
         _asApostrophe = false;
         if (asSwitch) {
             asRestoreToEnglish(vRestoreAndStartNewSession, literalOnly); //auto switch: an English word typed in Vietnamese mode
-        } else if (vRestoreIfWrongSpelling && isWordBreak(event, state, data)) { //restore key if wrong spelling with break-key
+        } else if (vRestoreIfWrongSpelling && !stretched && isWordBreak(event, state, data)) { //restore key if wrong spelling with break-key
             if (!tempDisableKey && vCheckSpelling) {
                 checkSpelling(true); //force check spelling
             }
@@ -2225,10 +2291,11 @@ void vKeyHandleEvent(const vKeyEvent& event,
         if (!tempDisableKey && vCheckSpelling) {
             checkSpelling(true); //force check spelling
         }
-        if (asShouldRestoreToEnglish(literalOnly)) { //auto switch: an English word typed in Vietnamese mode
+        bool stretched = asStretchedVietnamese();   //"thèmmmm " stays as it is (D63)
+        if (!stretched && asShouldRestoreToEnglish(literalOnly)) { //auto switch: an English word typed in Vietnamese mode
             asRestoreToEnglish(vRestore, literalOnly);
             _spaceCount++;
-        } else if (vRestoreIfWrongSpelling && tempDisableKey) { //restore key if wrong spelling
+        } else if (vRestoreIfWrongSpelling && tempDisableKey && !stretched) { //restore key if wrong spelling
             if (!checkRestoreIfWrongSpelling(vRestore)) {
                 hCode = vDoNothing;
             }

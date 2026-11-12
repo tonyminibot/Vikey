@@ -220,3 +220,33 @@ D60	1	chi phis 	chi phí 	1	never when the letters are a Vietnamese word: phis (
 D60	0	chi phis 	chi phí 	1	same in EN mode
 D60	1	thans 	thán 	1	a guessed form that isn't a real English word stays Vietnamese
 D60	0	crypto nos volatile 	crypto nó volatile 	1	words already in the frequency list keep their own score: D22's nos -> nó stays
+D62	1	a oroo	a ỏo	1	undoing â/ê/ô on a toned first letter: the letter comes back as a character, not a key code (was NUL)
+D62	1	a asaa	a áa	1	same with a
+D62	1	a eree	a ẻe	1	same with e
+D62	1	a toroo	a tỏo	1	with a consonant before it already worked
+D62	1	a orww	a ỏw	1	undoing ơ on a toned first letter (w twice): same fix
+D62	1	a asww	a áw	1	same with ă
+D62	1	a urww	a ủw	1	same with ư
+D63	1	gofyyy	gòyyy	1	a stretched ending is no part of the vowels: the tone stays on the o (was goyyỳ)
+D63	1	hayfyyy	hàyyyy	1	same: was hayyyỳ
+D63	1	quasaaa	quáaa	1	same after the Telex undo of â: was quaaá
+D63	1	ddoosooo	đóooo	1	same: was đooóo
+D63	1	a orooooo	a ỏoooo	1	same at the start of a word: was oooỏo
+D63	1	xooofng	xoòng	1	a consonant after the oo: the tone goes back to the second o (xoòng, boóng)
+D63	1	boosong	boóng	1	same
+D63	1	thefmmmmm 	thèmmmmm 	1	a stretched Vietnamese word stays Vietnamese at its end (was put back to its keys and switched to English)
+D63	1	gofyyyyy 	gòyyyyy 	1	same, teencode gòy (D53)
+D63	1	orooooo 	ỏoooo 	1	same, after the Telex undo of ô
+D63	1	gifiii 	gìiii 	1	the stretched i is the i of gi
+D63	1	cuaraaa 	củaaa 	1	the tone stays on the u: the stretched a is no end consonant
+D63	1	ddaayyyy 	đâyyyy 	1	was put back to its keys (restore if wrong spelling)
+D63	1	khoongggg 	khôngggg 	1	same
+D63	1	uwfmmmm 	ừmmmm 	1	same
+D63	1	thefmmmmm, tooi ddi	thèmmmmm, tôi đi	1	at a comma too, and the next words stay Vietnamese
+D63	1	thefmmmmm the best test 	thèmmmmm the best test 	0	English words after it don't pull it back to its keys (look-back)
+D63	1	beennnn 	bênnnn 	1	the keys once stretched are both (been / bên): decided as for the word itself
+D63	1	testtt 	testtt 	0	same: test is English
+D63	1	besttt 	besttt 	0	same
+D63	1	THEFMMMM 	THEFMMMM 	0	2+ capitals keep the acronym rule (D23)
+D63	1	yesss 	yess 	0	a stretched tone key is no stretched letter: doubled tone key as before (D5.1)
+D63	1	hoyyyyy 	hoyyyyy 	1	unchanged: no Telex in it
