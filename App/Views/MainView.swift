@@ -20,6 +20,8 @@ struct MainView: View {
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
     @State private var browserDenied = false
     @State private var excluded = ExcludedApps.all
+    @State private var keyboardChoices = KeyboardLayouts.overrides
+    @State private var installedKeyboards = KeyboardLayouts.installed()
     @State private var lastContentHeight: CGFloat = 0
     @ObservedObject private var updater = Updater.shared
 
@@ -57,6 +59,7 @@ struct MainView: View {
                 case "viet": Section { vietRows }
                 case "emoji": Section { emojiRows }
                 case "excluded": Section { excludedRows }
+                case "keyboard": Section { keyboardRows }
                 default:
                     Section { hotkeyRows }
                     Section { generalRows }
@@ -79,11 +82,12 @@ struct MainView: View {
 
     private static let tabs: [(id: String, title: String, icon: String)] = [
         ("general", "Chung", "gearshape"), ("auto", "Tự chuyển", "arrow.left.arrow.right"),
-        ("viet", "Gõ tiếng Việt", "character.cursor.ibeam"), ("emoji", "Emoji", "face.smiling"), ("excluded", "Loại trừ", "nosign"),
+        ("viet", "Gõ tiếng Việt", "character.cursor.ibeam"), ("emoji", "Emoji", "face.smiling"), ("excluded", "Loại trừ", "nosign"), ("keyboard", "Bàn phím", "keyboard"),
     ]
 
     private func select(_ id: String) {
         tab = id
+        if id == "keyboard" { installedKeyboards = KeyboardLayouts.installed(); keyboardChoices = KeyboardLayouts.overrides }   // keyboards may have been added in System Settings
     }
 
     private var tabBar: some View {
@@ -95,7 +99,7 @@ struct MainView: View {
                         Image(systemName: t.icon).font(.system(size: 18)).frame(height: 22)
                         Text(t.title).font(.system(size: 11))
                     }
-                    .frame(width: 80, height: 50)
+                    .frame(width: 72, height: 50)
                     .foregroundStyle(on ? Color.accentColor : Color.secondary)
                     .background(RoundedRectangle(cornerRadius: 8).fill(on ? Color.primary.opacity(0.08) : .clear))
                     .contentShape(Rectangle())
@@ -213,6 +217,36 @@ struct MainView: View {
                     Spacer()
                     Button("Mặc định") { ExcludedApps.resetToDefaults(); excluded = ExcludedApps.all }
                 }
+    }
+    @ViewBuilder private var keyboardRows: some View {
+                Text("Chọn bàn phím Vikey gõ tiếng Việt. Bàn phím không có trong danh sách: Vikey tự đoán (bỏ qua bàn phím tiếng Nhật, Trung, Hàn...). Thêm bàn phím của bạn, kể cả bàn phím tự tạo, rồi bật hoặc tắt.")
+                    .font(.callout).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                ForEach(keyboardChoices.keys.sorted(), id: \.self) { id in
+                    let name = installedKeyboards.first { $0.id == id }?.name ?? id
+                    HStack(spacing: 8) {
+                        Toggle(isOn: Binding(get: { (keyboardChoices[id] ?? 0) != 0 }, set: { KeyboardLayouts.set(id, on: $0); keyboardChoices = KeyboardLayouts.overrides })) {
+                            Label(name, systemImage: "keyboard")
+                        }
+                        Button { KeyboardLayouts.remove(id); keyboardChoices = KeyboardLayouts.overrides } label: { Image(systemName: "minus.circle") }
+                            .buttonStyle(.plain).foregroundStyle(.secondary)
+                            .accessibilityLabel("Bỏ \(name)")
+                            .help(id)
+                    }
+                }
+                Menu("Thêm bàn phím") {
+                    let free = installedKeyboards.filter { keyboardChoices[$0.id] == nil }
+                    ForEach(free.filter(\.isEnabledInMac)) { addKeyboardButton($0) }
+                    let others = free.filter { !$0.isEnabledInMac }
+                    if !others.isEmpty {
+                        Divider()
+                        Menu("Bàn phím khác của macOS") { ForEach(others) { addKeyboardButton($0) } }
+                    }
+                }
+                .fixedSize()
+    }
+    private func addKeyboardButton(_ kb: KeyboardLayouts.Source) -> some View {
+        Button(kb.name) { KeyboardLayouts.add(kb.id); keyboardChoices = KeyboardLayouts.overrides }
     }
     @ViewBuilder private var generalRows: some View {
                 Toggle(isOn: Binding(get: { launchAtLogin }, set: { LaunchAtLogin.set($0); launchAtLogin = LaunchAtLogin.isEnabled })) {

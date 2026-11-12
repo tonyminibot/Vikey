@@ -19,6 +19,7 @@ enum PrefKey {
     static let teencode = "Teencode"
     static let telexStyle = "TelexStyle"   // D56: 0 Telex, 1 Simple Telex 1, 2 Simple Telex 2
     static let excludedApps = "ExcludedApps"   // bundle ids Vikey stays out of (array of String)
+    static let keyboardOverrides = "KeyboardOverrides"   // input source id -> 1 (Vikey types) / 0 (Vikey stays out)
     static let mainTab = "MainWindowTab"   // the main window's tab
 }
 

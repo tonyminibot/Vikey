@@ -31,3 +31,4 @@ D54	open	Linux pre-edit in apps that never report the surrounding text: needs a 
 D55	none	packaging (Arch Linux)
 D59	test	iOS/Tests/KeyboardSystemParityTests.swift::testColonAndSemicolonStay
 D61	test	Tools/autoswitch/driver/undo_test.cpp::booj source vaay <, ; Windows/Tests/cases.tsv::late_comma_keeps_fix_D61 ; Linux/Tests/cases-linux.tsv::late_comma_keeps_fix_D61 ; Tools/autoswitch/sim/rtsim.cpp::late-punct
+D62	open	custom keyboard layouts and the per-keyboard switch: Mac app-level (VikeyCore.mm, MainView), needs a live Mac test

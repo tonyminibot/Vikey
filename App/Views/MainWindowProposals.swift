@@ -10,7 +10,7 @@ enum MainWindowProposals {
         let dark = UserDefaults.standard.bool(forKey: "renderDark")
         NSApp.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         let suffix = dark ? "-dark" : ""
-        for tab in ["general", "auto", "viet", "emoji", "excluded"] {   // every tab of the main window
+        for tab in ["general", "auto", "viet", "emoji", "excluded", "keyboard"] {   // every tab of the main window
             UserDefaults.standard.set(tab, forKey: PrefKey.mainTab)
             render(AnyView(MainView().environmentObject(AppState.shared)), "tab-\(tab)\(suffix)", dir)
         }

@@ -5,6 +5,20 @@ Each entry records what was asked, what was decided, and its status. Newest firs
 
 Status values: **Shipped** (in a build Tony has), **Agreed** (decided, not built yet), **Rejected**.
 
+## 62. Custom keyboard layouts work, and the user can choose which keyboards Vikey types on (Mac)
+
+**Status:** Proposed (pull request). Not in a build yet.
+
+**Problem.** A custom keyboard layout (a `.keylayout` file, even a plain QWERTY one) typed no Vietnamese. macOS lists such a layout's languages starting with an empty string, Vikey read "" as "another language" (like Japanese) and stepped out of the way.
+
+**Decision.**
+- A keyboard that names no language is judged by whether it types ASCII letters: it does, so Vikey types on it. Japanese, Chinese and Korean keyboards (not ASCII) are still left alone. Keyboards that name a language behave as before.
+- A new "Bàn phím" tab lists keyboards the user added, each with a switch (Vikey types on it or not). "Thêm bàn phím" adds any keyboard macOS has, custom layouts included; the minus button removes it. A keyboard not in the list keeps Vikey's own guess. The choice beats the guess, both ways (it can turn Vikey on for a keyboard it would skip).
+
+**Tests.** Mac app level, run by hand on a Mac (see the pull request): custom QWERTY, U.S./ABC, Dvorak/Colemak, Japanese/Pinyin, and the switch both ways. `Engine/` and the other platforms are untouched.
+
+---
+
 ## 61. Backspace after a fixed word: the first takes the space, the second undoes
 
 **Status:** Shipped in 1.0.33 (Mac), 2026-11-12. Tony approved it (a user's report, via Tony). Live test on the Mac app: 26/26.

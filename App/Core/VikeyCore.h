@@ -35,6 +35,8 @@ extern NSNotificationName const VikeyLanguageDidChangeNotification;
 + (BOOL)autoSwitchEnabledForFrontApp;
 + (void)setAutoSwitchForFrontApp:(BOOL)on;
 + (BOOL)frontAppIsExcluded;
+/// Does Vikey stay out of this keyboard (input source id) unless the user chose otherwise? (Japanese, Chinese...)
++ (BOOL)inputSourceIsIgnoredByDefault:(NSString *)sourceID;
 + (NSString *)frontAppName;
 
 /// Asks macOS for permission to read the tab address of every running browser (per-site memory).
