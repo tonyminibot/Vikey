@@ -417,10 +417,9 @@ static wchar_t CharacterOf(Uint32 data) { return (data & CHAR_CODE_MASK) ? (wcha
 
 
 static bool IsTextExpansionBoundary(Uint16 key, bool shift) {
-    if (key == KEY_SPACE || key == KEY_RETURN || key == KEY_ENTER || key == KEY_TAB ||
-        key == KEY_COMMA || key == KEY_DOT || key == KEY_SEMICOLON || key == KEY_RIGHT_BRACKET) return true;
-    if (shift && (key == KEY_SEMICOLON || key == KEY_SLASH || key == KEY_1 || key == KEY_0 ||
-                  key == KEY_RIGHT_BRACKET || key == KEY_LEFT_BRACKET)) return true;
+    if (key == KEY_SPACE || key == KEY_RETURN || key == KEY_ENTER || key == KEY_TAB) return true;
+    if (!shift && (key == KEY_COMMA || key == KEY_DOT || key == KEY_SEMICOLON || key == KEY_RIGHT_BRACKET)) return true;
+    if (shift && (key == KEY_SEMICOLON || key == KEY_SLASH || key == KEY_1 || key == KEY_0 || key == KEY_RIGHT_BRACKET)) return true;
     return false;
 }
 
@@ -465,7 +464,13 @@ static bool TryTextExpansionBoundary() {
     ResetTextExpansion();
     if (!match.matched) return false;
 
-    batchBackspaces(match.deleteCount);
+    int removeCount = match.deleteCount;
+    if (vFixRecommendBrowser) {
+        wchar_t e = 0x202F;
+        batchText(&e, 1);
+        ++removeCount;
+    }
+    batchBackspaces(removeCount);
     if (!match.replacement.empty()) {
         std::vector<wchar_t> text;
         text.reserve(match.replacement.size());
