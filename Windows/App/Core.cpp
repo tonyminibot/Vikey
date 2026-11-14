@@ -157,6 +157,7 @@ static bool SensitiveTypingApp() {
         L"1password.exe", L"bitwarden.exe", L"keepassxc.exe", L"keepass.exe", L"lastpass.exe", L"dashlane.exe", L"enpass.exe", L"nordpass.exe",
         L"windowsterminal.exe", L"cmd.exe", L"powershell.exe", L"pwsh.exe", L"putty.exe", L"wezterm-gui.exe", L"alacritty.exe", L"conhost.exe", L"openconsole.exe", L"termius.exe" };
     std::wstring app = _frontApp; std::transform(app.begin(), app.end(), app.begin(), ::towlower);
+    if (app == L"vikey.exe") return true;   // never expand while the user is editing Vikey's own settings.
     for (auto e : excluded) if (app == e) return true;
     return false;
 }
