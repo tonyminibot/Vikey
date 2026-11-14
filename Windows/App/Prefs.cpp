@@ -3,6 +3,7 @@
 #include <shlobj.h>
 #include <fstream>
 #include <unordered_map>
+#include <utility>
 
 namespace vikey { namespace prefs {
 
@@ -131,27 +132,34 @@ static bool saveTextExpansionsForMigration(const std::vector<TextExpansionEntry>
     return true;
 }
 
-static std::vector<TextExpansionEntry> loadExistingTextExpansionsForMigration() {
-    std::vector<TextExpansionEntry> entries;
+static bool loadExistingTextExpansionsForMigration(std::vector<TextExpansionEntry>& entries) {
+    entries.clear();
     std::wstring p = appDataDir() + L"\\text-expansions.json";
     HANDLE fh = CreateFileW(p.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (fh == INVALID_HANDLE_VALUE) return entries;
-    LARGE_INTEGER sz = {}; if (!GetFileSizeEx(fh, &sz) || sz.QuadPart <= 0 || sz.QuadPart > 4LL * 1024 * 1024) { CloseHandle(fh); return entries; }
+    if (fh == INVALID_HANDLE_VALUE) {
+        DWORD e = GetLastError();
+        return e == ERROR_FILE_NOT_FOUND || e == ERROR_PATH_NOT_FOUND;
+    }
+    LARGE_INTEGER sz = {};
+    if (!GetFileSizeEx(fh, &sz) || sz.QuadPart < 0 || sz.QuadPart > 4LL * 1024 * 1024) { CloseHandle(fh); return false; }
+    if (sz.QuadPart == 0) { CloseHandle(fh); return true; }
     std::string data((std::size_t)sz.QuadPart, '\0'); DWORD read = 0;
     BOOL ok = ReadFile(fh, &data[0], (DWORD)data.size(), &read, nullptr); CloseHandle(fh);
-    if (!ok || read != data.size()) return entries;
-    TextExpansionIOResult r = textExpansionParseJson(data); if (r.ok) entries = r.entries;
-    return entries;
+    if (!ok || read != data.size()) return false;
+    TextExpansionIOResult r = textExpansionParseJson(data);
+    if (!r.ok) return false;
+    entries = std::move(r.entries);
+    return true;
 }
 
 static void migrateTextExpansionsFromOpenKey(HKEY h) {
     if (has(L"MigratedTextExpansionsFromOpenKey")) return;
 
     // Preserve the user's current Vikey settings. Only fill missing scalar preferences from OpenKey.
-    struct { const wchar_t* from; const wchar_t* to; int fallback; } toggles[] = {
-        {L"vUseMacro", L"UseMacro", 1},
-        {L"vUseMacroInEnglishMode", L"UseMacroInEnglishMode", 0},
-        {L"vAutoCapsMacro", L"vAutoCapsMacro", 0},
+    struct { const wchar_t* from; const wchar_t* to; } toggles[] = {
+        {L"vUseMacro", L"UseMacro"},
+        {L"vUseMacroInEnglishMode", L"UseMacroInEnglishMode"},
+        {L"vAutoCapsMacro", L"vAutoCapsMacro"},
     };
     for (auto& m : toggles) {
         if (has(m.to)) continue;
@@ -170,7 +178,8 @@ static void migrateTextExpansionsFromOpenKey(HKEY h) {
     TextExpansionIOResult imported = textExpansionImportLegacyOpenKeyBinary(data.data(), data.size());
     if (!imported.ok) return;
 
-    std::vector<TextExpansionEntry> merged = loadExistingTextExpansionsForMigration();
+    std::vector<TextExpansionEntry> merged;
+    if (!loadExistingTextExpansionsForMigration(merged)) return; // preserve a corrupt/unreadable Vikey file for recovery.
     std::unordered_map<std::u16string, std::size_t> existing;
     for (std::size_t i = 0; i < merged.size(); ++i) existing[merged[i].trigger] = i;
     for (const auto& e : imported.entries) {
