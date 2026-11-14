@@ -134,7 +134,7 @@ extern "C" {
     static bool _textExpansionAutoCaps = false;
     static void ResetTextExpansion() { _textExpansionSession.reset(); }
     static void ReloadTextExpansions() {
-        TextExpansionIOResult r = text_expansion_store_mac::load();
+        TextExpansionIOResult r = text_expansion_store::load();
         if (r.ok) _textExpansion.setEntries(r.entries);
     }
     
