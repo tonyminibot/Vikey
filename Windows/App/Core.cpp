@@ -152,12 +152,16 @@ void clearTypingLog() {
     { std::lock_guard<std::mutex> g(_tlMutex); _tlPending.clear(); }
     std::wstring path = typingLogPath(); DeleteFileW(path.c_str()); DeleteFileW((path.substr(0, path.size() - 6) + L".1.jsonl").c_str());
 }
-static bool TLKeysAllowed() {
-    static const wchar_t* excluded[] = { // password managers and terminals (sudo/ssh passwords are typed in plain view of the hook)
+static bool SensitiveTypingApp() {
+    static const wchar_t* excluded[] = { // password managers and terminals (sudo/ssh passwords can be typed in plain view of the hook)
         L"1password.exe", L"bitwarden.exe", L"keepassxc.exe", L"keepass.exe", L"lastpass.exe", L"dashlane.exe", L"enpass.exe", L"nordpass.exe",
         L"windowsterminal.exe", L"cmd.exe", L"powershell.exe", L"pwsh.exe", L"putty.exe", L"wezterm-gui.exe", L"alacritty.exe", L"conhost.exe", L"openconsole.exe", L"termius.exe" };
-    std::wstring app = _tlApp; std::transform(app.begin(), app.end(), app.begin(), ::towlower);
-    for (auto e : excluded) if (app == e) return false;
+    std::wstring app = _frontApp; std::transform(app.begin(), app.end(), app.begin(), ::towlower);
+    for (auto e : excluded) if (app == e) return true;
+    return false;
+}
+static bool TLKeysAllowed() {
+    if (SensitiveTypingApp()) return false;
     if (site::focusedIsPassword()) return false;   // like secure input on macOS: never the keys of a password field
     return vTypingLogKeys != 0;
 }
@@ -456,7 +460,7 @@ static bool TryTextExpansionBoundary() {
     if (!IsTextExpansionBoundary(_keycode, shift)) return false;
 
     bool allowed = _textExpansionEnabled && (vLanguage != 0 || _textExpansionInEnglish) &&
-                   !(vOtherLanguage && _otherInputLanguage);
+                   !(vOtherLanguage && _otherInputLanguage) && !SensitiveTypingApp() && !site::focusedIsPassword();
     TextExpansionMatch match;
     if (allowed && !_textExpansionSession.token().empty())
         match = _textExpansion.find(_textExpansionSession.token(), _textExpansionAutoCaps);
@@ -489,6 +493,10 @@ static bool TryTextExpansionBoundary() {
 }
 
 static void TrackUnprocessedTextExpansionKey() {
+    if (!_textExpansionEnabled || (vLanguage == 0 && !_textExpansionInEnglish) ||
+        SensitiveTypingApp() || site::focusedIsPassword() || (vOtherLanguage && _otherInputLanguage)) {
+        ResetTextExpansion(); return;
+    }
     if (OTHER_CONTROL_KEY) { ResetTextExpansion(); return; }
     if (_keycode == KEY_DELETE) { _textExpansionSession.erase(1); return; }
     if (IsTextExpansionBoundary(_keycode, (_flag & F_SHIFT) != 0)) { ResetTextExpansion(); return; }
