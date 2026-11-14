@@ -292,6 +292,7 @@ extern "C" {
 
     /// Dvorak, Colemak, AZERTY...: map each key back to its QWERTY position so Telex works.
     void VKUpdateLayoutCompat() {
+        ResetTextExpansion();
         TISInputSourceRef src = TISCopyCurrentKeyboardLayoutInputSource();
         NSString* sid = src ? (__bridge NSString*)TISGetInputSourceProperty(src, kTISPropertyInputSourceID) : nil;
         static NSSet* qwerty;
@@ -389,6 +390,7 @@ extern "C" {
         [d setObject:m forKey:kAutoSwitchPerApp];
         if (!AutoSwitchPaused()) vAutoSwitchByTyping = AutoSwitchForApp(app);
         StartEnglishWord(false);   // the word being typed now wasn't followed from its start
+        ResetTextExpansion();
     }
 
     void VKLoadSettings() {
@@ -418,6 +420,7 @@ extern "C" {
         vSwitchKeyStatus = hotkey ? hotkey : 0x7A000206;  // default ⌥Z
         vEmojiHotkey = get(@"EmojiPicker", 0) ? get(@"EmojiHotkey", 0) : 0;
         VKUpdateLayoutCompat();
+        ResetTextExpansion();
     }
 
     void VikeyInit() {
@@ -966,7 +969,8 @@ extern "C" {
 
     static bool SensitiveTypingContext() {
         NSString* app = FRONT_APP;
-        return IsSecureEventInputEnabled() || (app != nil && [SensitiveTypingApps() containsObject:app]);
+        return IsSecureEventInputEnabled() ||
+               (app != nil && ([app isEqualToString:VIKEY_BUNDLE] || [SensitiveTypingApps() containsObject:app]));
     }
 
     static bool TLKeysAllowed() {
@@ -1417,7 +1421,9 @@ extern "C" {
 
         // Text expansion wins at a boundary before Auto Switch can reinterpret the trigger.
         // Replacement events carry VIKEY_EVENT_TAG and therefore cannot recursively expand.
-        if (type == kCGEventKeyDown && !(OTHER_CONTROL_KEY) && TryTextExpansionBoundary())
+        if (type == kCGEventKeyDown &&
+            !(_flag & (kCGEventFlagMaskCommand | kCGEventFlagMaskControl | kCGEventFlagMaskAlternate | kCGEventFlagMaskHelp)) &&
+            TryTextExpansionBoundary())
             return NULL;
         
         //If is in english mode
