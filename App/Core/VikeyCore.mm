@@ -106,6 +106,7 @@ extern "C" {
     UniChar _newChar, _newCharHi;
     CGEventRef _newEventDown, _newEventUp;
     CGKeyCode _keycode;
+    CGKeyCode _physicalKeycode;   // before Dvorak/Colemak/AZERTY compatibility remaps the key for the engine
     CGEventFlags _flag, _lastFlag = 0, _privateFlag;
     // a key or click came while modifiers were held: they were for it, not a modifier-only hotkey (cleared when all are up)
     static bool _modifierChordUsed = false;
@@ -840,7 +841,7 @@ extern "C" {
             for (char16_t c : match.replacement) text.push_back((UniChar)c);
             PostText(text.data(), (int)text.size());
         }
-        SendKeyCode(_keycode, _flag);
+        SendKeyCode(_physicalKeycode, _flag);
 
         _autoFixUndo.active = false;
         ResetEnglishWord(true);
@@ -1327,6 +1328,7 @@ extern "C" {
 
         _flag = CGEventGetFlags(event);
         _keycode = (CGKeyCode)CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode);
+        _physicalKeycode = _keycode;
         
         if (type == kCGEventKeyDown && vPerformLayoutCompat) {
             // If conversion fail, use current keycode
