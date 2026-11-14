@@ -16,7 +16,7 @@ set(ROOT ${CMAKE_CURRENT_SOURCE_DIR}/..)
 set(ENGINE ${ROOT}/Engine)
 set(AS ${ROOT}/Tools/autoswitch)
 
-set(ENGINE_SRC ${ENGINE}/Engine.cpp ${ENGINE}/Vietnamese.cpp ${ENGINE}/SmartSwitchKey.cpp)
+set(ENGINE_SRC ${ENGINE}/Engine.cpp ${ENGINE}/Vietnamese.cpp ${ENGINE}/SmartSwitchKey.cpp ${ENGINE}/TextExpansion.cpp)
 
 add_library(vikey_engine STATIC ${ENGINE_SRC} ${ENGINE}/Driver.cpp ${ENGINE}/TouchModel.cpp)
 target_include_directories(vikey_engine PUBLIC ${ENGINE} ${ENGINE}/platforms)
@@ -50,6 +50,12 @@ vikey_tool(sim      ${AS}/sim/sim.cpp         ${AS}/sim    vikey_engine_testing)
 vikey_tool(drvlazy  ${AS}/driver/drvlazy.cpp  ${AS}/driver vikey_engine)
 vikey_tool(bench    ${AS}/driver/bench.cpp    ${AS}/driver vikey_engine)
 vikey_tool(touchsim ${AS}/touch/touchsim.cpp  ${AS}/touch  vikey_engine)
+
+# Shared text-expansion unit test: platform-independent and deliberately linked only to TextExpansion.cpp.
+add_executable(text_expansion_test ${ROOT}/Tools/text_expansion/test.cpp ${ENGINE}/TextExpansion.cpp)
+target_include_directories(text_expansion_test PRIVATE ${ENGINE})
+set_target_properties(text_expansion_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${ROOT}/Tools/text_expansion
+  RUNTIME_OUTPUT_DIRECTORY_RELEASE ${ROOT}/Tools/text_expansion RUNTIME_OUTPUT_DIRECTORY_DEBUG ${ROOT}/Tools/text_expansion)
 
 # Windows app (added in Phase 2)
 if(WIN32 AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/App/CMakeLists.txt)

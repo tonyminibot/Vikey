@@ -21,3 +21,6 @@ Windows/installer/out/
 Windows/installer/mkinst.cmd
 
 Windows/Tests/livetest.out
+
+Tools/text_expansion/text_expansion_test
+Tools/text_expansion/text_expansion_test.exe
