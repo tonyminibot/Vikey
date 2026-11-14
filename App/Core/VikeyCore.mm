@@ -745,8 +745,11 @@ extern "C" {
 
     static bool IsTextExpansionBoundary(Uint16 key, bool shift) {
         if (key == KEY_SPACE || key == KEY_RETURN || key == KEY_ENTER || key == KEY_TAB) return true;
-        if (!shift && (key == KEY_COMMA || key == KEY_DOT || key == KEY_SEMICOLON || key == KEY_RIGHT_BRACKET)) return true;
-        if (shift && (key == KEY_SEMICOLON || key == KEY_SLASH || key == KEY_1 || key == KEY_0 || key == KEY_RIGHT_BRACKET)) return true;
+        bool literalRightBracket = !(vLanguage == 1 && vTelexStyle == 0); // standard Telex uses ] to type ư.
+        if (!shift && (key == KEY_COMMA || key == KEY_DOT || key == KEY_SEMICOLON ||
+                       (key == KEY_RIGHT_BRACKET && literalRightBracket))) return true;
+        if (shift && (key == KEY_SEMICOLON || key == KEY_SLASH || key == KEY_1 || key == KEY_0 ||
+                      (key == KEY_RIGHT_BRACKET && literalRightBracket))) return true;
         return false;
     }
 
