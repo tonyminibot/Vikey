@@ -737,6 +737,118 @@ extern "C" {
         return false;
     }
 
+    static bool SensitiveTypingContext();
+
+    static bool IsTextExpansionBoundary(Uint16 key, bool shift) {
+        if (key == KEY_SPACE || key == KEY_RETURN || key == KEY_ENTER || key == KEY_TAB) return true;
+        if (!shift && (key == KEY_COMMA || key == KEY_DOT || key == KEY_SEMICOLON || key == KEY_RIGHT_BRACKET)) return true;
+        if (shift && (key == KEY_SEMICOLON || key == KEY_SLASH || key == KEY_1 || key == KEY_0 || key == KEY_RIGHT_BRACKET)) return true;
+        return false;
+    }
+
+    static std::u16string EngineInsertedText() {
+        std::u16string out;
+        for (int k = pData->newCharCount - 1; k >= 0; --k) {
+            Uint32 c = pData->charData[k];
+            Uint16 ch = (c & CHAR_CODE_MASK) ? (Uint16)(c & 0xFFFF) : keyCodeToCharacter(c);
+            if (ch) out.push_back((char16_t)ch);
+        }
+        return out;
+    }
+
+    static int TextExpansionTokenScalarCount() {
+        const std::u16string& token = _textExpansionSession.token();
+        int count = 0;
+        for (std::size_t i = 0; i < token.size(); ++i) {
+            char16_t c = token[i];
+            if (c >= 0xD800 && c <= 0xDBFF && i + 1 < token.size() &&
+                token[i + 1] >= 0xDC00 && token[i + 1] <= 0xDFFF) ++i;
+            ++count;
+        }
+        return count;
+    }
+
+    static void SyncTextExpansionFromEngine() {
+        if (IsTextExpansionBoundary(_keycode, (_flag & kCGEventFlagMaskShift) != 0)) {
+            ResetTextExpansion();
+            return;
+        }
+        if (pData->code == vWillProcess) {
+            if (pData->backspaceCount > TextExpansionTokenScalarCount()) {
+                ResetTextExpansion();
+                return;
+            }
+            _textExpansionSession.applyEdit(pData->backspaceCount, EngineInsertedText());
+        } else if (pData->code == vRestore || pData->code == vRestoreAndStartNewSession) {
+            // Restore can replace an arbitrary portion of the word. A missed expansion is safer than a stale match.
+            ResetTextExpansion();
+        }
+    }
+
+    static void TrackUnprocessedTextExpansionKey(CGEventRef event) {
+        if (!_textExpansionEnabled || (vLanguage == 0 && !_textExpansionInEnglish) ||
+            SensitiveTypingContext() || (vOtherLanguage && _otherInputLanguage)) {
+            ResetTextExpansion();
+            return;
+        }
+        if (OTHER_CONTROL_KEY) { ResetTextExpansion(); return; }
+        if (_keycode == KEY_DELETE) { _textExpansionSession.erase(1); return; }
+        if (IsTextExpansionBoundary(_keycode, (_flag & kCGEventFlagMaskShift) != 0)) {
+            ResetTextExpansion();
+            return;
+        }
+
+        UniChar chars[8] = {};
+        UniCharCount n = 0;
+        CGEventKeyboardGetUnicodeString(event, 8, &n, chars);
+        if (n <= 0 || n > 8) { ResetTextExpansion(); return; }
+        std::u16string text;
+        text.reserve((std::size_t)n);
+        for (UniCharCount i = 0; i < n; ++i) text.push_back((char16_t)chars[i]);
+        _textExpansionSession.append(text);
+    }
+
+    static bool TryTextExpansionBoundary() {
+        bool shift = (_flag & kCGEventFlagMaskShift) != 0;
+        if (!IsTextExpansionBoundary(_keycode, shift)) return false;
+
+        bool allowed = _textExpansionEnabled && (vLanguage != 0 || _textExpansionInEnglish) &&
+                       !(vOtherLanguage && _otherInputLanguage) && !SensitiveTypingContext();
+        vikey::TextExpansionMatch match;
+        if (allowed && !_textExpansionSession.token().empty())
+            match = _textExpansion.find(_textExpansionSession.token(), _textExpansionAutoCaps);
+
+        ResetTextExpansion();
+        if (!match.matched) return false;
+
+        int removeCount = match.deleteCount;
+        if (shouldUseRecommendWorkaround(FRONT_APP)) {
+            SendEmptyCharacter();
+            ++removeCount;
+        }
+
+        bool selectedReplacement = shouldUseSelectionReplacement(FRONT_APP);
+        if (selectedReplacement) {
+            for (int i = 0; i < removeCount; ++i) SendShiftAndLeftArrow();
+        } else {
+            for (int i = 0; i < removeCount; ++i) SendBackspace();
+        }
+
+        if (!match.replacement.empty()) {
+            std::vector<UniChar> text;
+            text.reserve(match.replacement.size());
+            for (char16_t c : match.replacement) text.push_back((UniChar)c);
+            PostText(text.data(), (int)text.size());
+        }
+        SendKeyCode(_keycode, _flag);
+
+        _autoFixUndo.active = false;
+        ResetEnglishWord(true);
+        startNewSession();
+        vAutoSwitchForget();
+        return true;
+    }
+
     // ---- Typing log ---------------------------------------------------------------------
     // Records manual vs automatic language switches and, when allowed, the keys of each word,
     // so auto switch can be tuned on real typing. Words are kept in a small buffer; lines are
