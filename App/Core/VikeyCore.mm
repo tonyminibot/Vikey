@@ -950,7 +950,7 @@ extern "C" {
         dispatch_async(_tlQueue, ^{ dispatch_async(dispatch_get_main_queue(), done); });
     }
 
-    static bool TLKeysAllowed() {
+    static NSSet* SensitiveTypingApps() {
         static NSSet* excluded;
         if (!excluded) excluded = [NSSet setWithArray:@[
             // password managers
@@ -960,7 +960,16 @@ extern "C" {
             // terminals (sudo and ssh passwords are typed in plain view of the event tap)
             @"com.apple.Terminal", @"com.googlecode.iterm2", @"dev.warp.Warp-Stable", @"com.mitchellh.ghostty",
             @"io.alacritty", @"net.kovidgoyal.kitty", @"com.github.wez.wezterm", @"co.zeit.hyper", @"com.termius-dmg.mac"]];
-        return vTypingLogKeys && !IsSecureEventInputEnabled() && ![excluded containsObject:_tlApp];
+        return excluded;
+    }
+
+    static bool SensitiveTypingContext() {
+        NSString* app = FRONT_APP;
+        return IsSecureEventInputEnabled() || (app != nil && [SensitiveTypingApps() containsObject:app]);
+    }
+
+    static bool TLKeysAllowed() {
+        return vTypingLogKeys && !IsSecureEventInputEnabled() && ![SensitiveTypingApps() containsObject:_tlApp];
     }
 
     static void TLWrite(NSMutableDictionary* d) {
