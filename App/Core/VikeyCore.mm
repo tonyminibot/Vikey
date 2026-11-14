@@ -10,6 +10,8 @@
 #import <Carbon/Carbon.h>
 #import <Foundation/Foundation.h>
 #import "Engine.h"
+#import "TextExpansion.h"
+#import "TextExpansionStore.h"
 #import "VikeyCore.h"
 
 /// The switch sound (Tony picked "sparkle", 2026-10-29): two tiny notes, rising into Vietnamese, falling into English.
@@ -70,6 +72,20 @@ static void (^vEmojiHandler)(void) = nil;
 int vLanguage = 1, vSwitchKeyStatus = 0x7A000206, vCheckSpelling = 1, vUseModernOrthography = 1;
 int vRestoreIfWrongSpelling = 1, vFixRecommendBrowser = 1, vUseSmartSwitchKey = 1, vOtherLanguage = 1;
 int vAutoSwitchByTyping = 1, vPerformLayoutCompat = 0;
+
+// ---- Text expansion ("Gõ tắt") -------------------------------------------------------------
+static vikey::TextExpansionManager _textExpansion;
+static vikey::TextExpansionSession _textExpansionSession;
+static bool _textExpansionEnabled = true;
+static bool _textExpansionInEnglish = true;
+static bool _textExpansionAutoCaps = false;
+static void ResetTextExpansion() { _textExpansionSession.reset(); }
+
+static void ReloadTextExpansions() {
+    vikey::TextExpansionIOResult r = vikey::text_expansion_store::load();
+    if (r.ok) _textExpansion.setEntries(r.entries);
+}
+
 
 NSNotificationName const VikeyLanguageDidChangeNotification = @"VikeyLanguageDidChange";
 
@@ -393,6 +409,10 @@ extern "C" {
         UpdateFrontExcluded();
         vTypingLogKeys = get(@"TypingLogKeys", 1);
         vTypingLogEnabled = get(@"TypingLogEnabled", 0);
+        _textExpansionEnabled = get(@"UseMacro", 1) != 0;
+        _textExpansionInEnglish = get(@"UseMacroInEnglishMode", 1) != 0;
+        _textExpansionAutoCaps = get(@"vAutoCapsMacro", 0) != 0;
+        ReloadTextExpansions();
         int hotkey = get(@"SwitchKeyStatus", 0);
         vSwitchKeyStatus = hotkey ? hotkey : 0x7A000206;  // default ⌥Z
         vEmojiHotkey = get(@"EmojiPicker", 0) ? get(@"EmojiHotkey", 0) : 0;
@@ -427,9 +447,11 @@ extern "C" {
     void OnFocusChanged() {
         ResetEnglishWord(true);
         _autoFixUndo.active = false;
+        ResetTextExpansion();
     }
 
     void RequestNewSession() {
+        ResetTextExpansion();
         //send event signal to Engine
         vKeyHandleEvent(vKeyEvent::Mouse, vKeyEventState::MouseDown, 0);
     }
@@ -514,6 +536,7 @@ extern "C" {
         _siteHost = nil;          // the new app's tab is looked up below; until then use the app key
         ResetEnglishWord(true);
         _autoFixUndo.active = false;
+        ResetTextExpansion();
         ApplySmartSwitch();
         UpdateSiteWatcher();
     }
@@ -521,6 +544,7 @@ extern "C" {
     void OnSiteChanged() {
         ResetEnglishWord(true);
         _autoFixUndo.active = false;
+        ResetTextExpansion();
         ApplySmartSwitch();
         startNewSession();
     }
@@ -541,6 +565,7 @@ extern "C" {
     
     void OnInputMethodChanged() {
         ResetEnglishWord(true);   // switched from the menu or the control panel: nothing to look back on
+        ResetTextExpansion();
         if (vUseSmartSwitchKey) {
             queryFrontMostApp();
             UpdateFrontExcluded();
@@ -654,6 +679,7 @@ extern "C" {
         PauseAutoSwitchAfterManual();
         _autoFixUndo.active = false;
         ResetEnglishWord(true);
+        ResetTextExpansion();
         if (vLanguage == 0)
             vLanguage = 1;
         else
@@ -998,6 +1024,7 @@ extern "C" {
             VKLanguageChanged(YES);
         }
         startNewSession();
+        ResetTextExpansion();
         ResetEnglishWord(false); // the cursor is at the end of a word we didn't see typed
         //back in English with the typed keys on screen: they are the current word again, so typing on
         //("vaay" + "j") is checked as a whole ("vaayj" -> "vậy"); the same word again stays as typed
@@ -1017,6 +1044,7 @@ extern "C" {
         vLanguage = language;
         VKLanguageChanged(YES); // updates the menu bar and the per-app/per-site memory
         startNewSession();
+        ResetTextExpansion();
         vAutoSwitchForget();
     }
 
