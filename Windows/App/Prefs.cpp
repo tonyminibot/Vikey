@@ -1,5 +1,9 @@
 #include "Prefs.h"
+#include "TextExpansionIO.h"
 #include <shlobj.h>
+#include <fstream>
+#include <unordered_map>
+#include <utility>
 
 namespace vikey { namespace prefs {
 
@@ -114,11 +118,85 @@ static void telexStyleFromOpenKey() {
     RegCloseKey(h);
 }
 
+static bool saveTextExpansionsForMigration(const std::vector<TextExpansionEntry>& entries) {
+    std::string json = textExpansionSerializeJson(entries);
+    std::wstring dst = appDataDir() + L"\\text-expansions.json";
+    std::wstring tmp = dst + L".migration.tmp";
+    HANDLE fh = CreateFileW(tmp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_WRITE_THROUGH, nullptr);
+    if (fh == INVALID_HANDLE_VALUE) return false;
+    DWORD written = 0; BOOL ok = json.empty() || WriteFile(fh, json.data(), (DWORD)json.size(), &written, nullptr);
+    if (ok) ok = FlushFileBuffers(fh);
+    CloseHandle(fh);
+    if (!ok || written != json.size()) { DeleteFileW(tmp.c_str()); return false; }
+    if (!MoveFileExW(tmp.c_str(), dst.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) { DeleteFileW(tmp.c_str()); return false; }
+    return true;
+}
+
+static bool loadExistingTextExpansionsForMigration(std::vector<TextExpansionEntry>& entries) {
+    entries.clear();
+    std::wstring p = appDataDir() + L"\\text-expansions.json";
+    HANDLE fh = CreateFileW(p.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (fh == INVALID_HANDLE_VALUE) {
+        DWORD e = GetLastError();
+        return e == ERROR_FILE_NOT_FOUND || e == ERROR_PATH_NOT_FOUND;
+    }
+    LARGE_INTEGER sz = {};
+    if (!GetFileSizeEx(fh, &sz) || sz.QuadPart < 0 || sz.QuadPart > 4LL * 1024 * 1024) { CloseHandle(fh); return false; }
+    if (sz.QuadPart == 0) { CloseHandle(fh); return true; }
+    std::string data((std::size_t)sz.QuadPart, '\0'); DWORD read = 0;
+    BOOL ok = ReadFile(fh, &data[0], (DWORD)data.size(), &read, nullptr); CloseHandle(fh);
+    if (!ok || read != data.size()) return false;
+    TextExpansionIOResult r = textExpansionParseJson(data);
+    if (!r.ok) return false;
+    entries = std::move(r.entries);
+    return true;
+}
+
+static void migrateTextExpansionsFromOpenKey(HKEY h) {
+    if (has(L"MigratedTextExpansionsFromOpenKey")) return;
+
+    // Preserve the user's current Vikey settings. Only fill missing scalar preferences from OpenKey.
+    struct { const wchar_t* from; const wchar_t* to; } toggles[] = {
+        {L"vUseMacro", L"UseMacro"},
+        {L"vUseMacroInEnglishMode", L"UseMacroInEnglishMode"},
+        {L"vAutoCapsMacro", L"vAutoCapsMacro"},
+    };
+    for (auto& m : toggles) {
+        if (has(m.to)) continue;
+        DWORD v = 0, size = sizeof(v), type = 0;
+        if (RegQueryValueExW(h, m.from, nullptr, &type, (LPBYTE)&v, &size) == ERROR_SUCCESS && type == REG_DWORD)
+            setInt(m.to, (int)v);
+    }
+
+    DWORD size = 0, type = 0;
+    LONG q = RegQueryValueExW(h, L"macroData", nullptr, &type, nullptr, &size);
+    if (q == ERROR_FILE_NOT_FOUND) { setInt(L"MigratedTextExpansionsFromOpenKey", 1); return; }
+    if (q != ERROR_SUCCESS || type != REG_BINARY || size == 0 || size > 4u * 1024u * 1024u) return;
+
+    std::vector<BYTE> data(size);
+    if (RegQueryValueExW(h, L"macroData", nullptr, &type, data.data(), &size) != ERROR_SUCCESS) return;
+    TextExpansionIOResult imported = textExpansionImportLegacyOpenKeyBinary(data.data(), data.size());
+    if (!imported.ok) return;
+
+    std::vector<TextExpansionEntry> merged;
+    if (!loadExistingTextExpansionsForMigration(merged)) return; // preserve a corrupt/unreadable Vikey file for recovery.
+    std::unordered_map<std::u16string, std::size_t> existing;
+    for (std::size_t i = 0; i < merged.size(); ++i) existing[merged[i].trigger] = i;
+    for (const auto& e : imported.entries) {
+        if (existing.find(e.trigger) != existing.end()) continue; // Vikey's current entry wins.
+        existing[e.trigger] = merged.size();
+        merged.push_back(e);
+    }
+    if (!saveTextExpansionsForMigration(merged)) return;
+    setInt(L"MigratedTextExpansionsFromOpenKey", 1);
+}
+
 void migrateFromOpenKey() {
     telexStyleFromOpenKey();
-    if (has(L"MigratedFromOpenKey")) return;
-    setInt(L"MigratedFromOpenKey", 1);
     HKEY h; if (RegOpenKeyExW(HKEY_CURRENT_USER, L"SOFTWARE\\TuyenMai\\OpenKey", 0, KEY_READ, &h) != ERROR_SUCCESS) return;
+    migrateTextExpansionsFromOpenKey(h);
+    if (has(L"MigratedFromOpenKey")) { RegCloseKey(h); return; }
+    setInt(L"MigratedFromOpenKey", 1);
     struct { const wchar_t* from; const wchar_t* to; } map[] = {
         {L"vLanguage", L"InputMethod"}, {L"vCheckSpelling", L"Spelling"}, {L"vRestoreIfWrongSpelling", L"RestoreIfInvalidWord"},
         {L"vUseModernOrthography", L"ModernOrthography"}, {L"vUseSmartSwitchKey", L"UseSmartSwitchKey"}, {L"vSwitchKeyStatus", L"SwitchKeyStatus"},

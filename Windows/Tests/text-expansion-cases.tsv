@@ -1,0 +1,10 @@
+# name	start	keys	expected
+expand_vi_space	vi	dc 	được 
+expand_en_space	en	ss 	Sun Santa 
+expand_comma	en	ss,	Sun Santa,
+expand_question	en	ss?	Sun Santa?
+expand_colon	en	ph:	phụ huynh:
+expand_close_brace	en	ss}	Sun Santa}
+expand_backspace_then_match	en	sss\b 	Sun Santa 
+expand_not_inside_word	en	abcdc 	abcdc 
+expand_navigation_resets	en	ss{home} 	 ss
