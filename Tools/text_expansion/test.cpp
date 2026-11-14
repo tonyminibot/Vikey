@@ -54,7 +54,7 @@ static void testMutation() {
 
 static void testAutoCaps() {
     TextExpansionManager m;
-    m.setEntries({{u"dc", u"được"}, {u"ss", u"Sun Santa"}, {u"đc", u"được"}});
+    m.setEntries({{u"dc", u"được"}, {u"ss", u"Sun Santa"}, {u"đc", u"được"}, {u"ýc", u"ý kiến"}});
 
     expect(!m.find(u"Dc", false).matched, "auto caps disabled is exact only");
 
@@ -69,6 +69,12 @@ static void testAutoCaps() {
 
     auto viUpper = m.find(u"ĐC", true);
     expect(viUpper.matched && viUpper.replacement == u"ĐƯỢC", "Vietnamese all-caps trigger");
+
+    auto yTitle = m.find(u"Ýc", true);
+    expect(yTitle.matched && yTitle.replacement == u"Ý kiến", "Vietnamese Ý title-case trigger");
+
+    auto yUpper = m.find(u"ÝC", true);
+    expect(yUpper.matched && yUpper.replacement == u"Ý KIẾN", "Vietnamese Ý all-caps trigger");
 
     expect(!m.find(u"dC", true).matched, "mixed-case trigger does not auto-match");
 

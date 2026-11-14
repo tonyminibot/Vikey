@@ -18,7 +18,7 @@ static char16_t lowerVietnamese(char16_t c) {
         case u'È': return u'è'; case u'É': return u'é'; case u'Ê': return u'ê';
         case u'Ì': return u'ì'; case u'Í': return u'í';
         case u'Ò': return u'ò'; case u'Ó': return u'ó'; case u'Ô': return u'ô'; case u'Õ': return u'õ';
-        case u'Ù': return u'ù'; case u'Ú': return u'ú';
+        case u'Ù': return u'ù'; case u'Ú': return u'ú'; case u'Ý': return u'ý';
         case u'Ă': return u'ă'; case u'Đ': return u'đ'; case u'Ĩ': return u'ĩ'; case u'Ũ': return u'ũ';
         case u'Ơ': return u'ơ'; case u'Ư': return u'ư';
         default: break;
@@ -37,7 +37,7 @@ static char16_t upperVietnamese(char16_t c) {
         case u'è': return u'È'; case u'é': return u'É'; case u'ê': return u'Ê';
         case u'ì': return u'Ì'; case u'í': return u'Í';
         case u'ò': return u'Ò'; case u'ó': return u'Ó'; case u'ô': return u'Ô'; case u'õ': return u'Õ';
-        case u'ù': return u'Ù'; case u'ú': return u'Ú';
+        case u'ù': return u'Ù'; case u'ú': return u'Ú'; case u'ý': return u'Ý';
         case u'ă': return u'Ă'; case u'đ': return u'Đ'; case u'ĩ': return u'Ĩ'; case u'ũ': return u'Ũ';
         case u'ơ': return u'Ơ'; case u'ư': return u'Ư';
         default: break;
