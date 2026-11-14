@@ -41,8 +41,10 @@ static std::u16string toU16(const std::wstring& w) {
 }
 static std::wstring textOf(HWND h) {
     int n = GetWindowTextLengthW(h);
-    std::wstring s(n, L'\0');
-    if (n) GetWindowTextW(h, &s[0], n + 1);
+    if (n <= 0) return L"";
+    std::wstring s((std::size_t)n + 1, L'\0');
+    GetWindowTextW(h, &s[0], n + 1);
+    s.resize((std::size_t)n);
     return s;
 }
 static std::wstring lower(std::wstring s) {
@@ -74,14 +76,15 @@ static void loadEntries() {
         setStatus(L"Không đọc được text-expansions.json");
     }
 }
-static void persist(const wchar_t* okMessage = nullptr) {
+static bool persist(const wchar_t* okMessage = nullptr) {
     std::string error;
     if (!text_expansion_store::save(entries, &error)) {
         MessageBoxW(win, L"Không thể lưu danh sách gõ tắt.", L"Vikey", MB_ICONERROR);
-        return;
+        return false;
     }
     core::reloadSettings();
     setStatus(okMessage ? okMessage : (std::to_wstring(entries.size()) + L" mục gõ tắt"));
+    return true;
 }
 static void clearEditor() {
     selected = -1;
@@ -135,13 +138,15 @@ static bool saveEditor() {
         entries[selected] = {t, r};
     } else entries.push_back({t, r});
 
-    persist(L"Đã lưu gõ tắt");
+    if (!persist(L"Đã lưu gõ tắt")) return false;
     rebuildList(); clearEditor(); return true;
 }
 static void deleteSelected() {
     if (selected < 0 || selected >= (int)entries.size()) return;
+    TextExpansionEntry removed = entries[selected];
     entries.erase(entries.begin() + selected);
-    persist(L"Đã xoá gõ tắt"); rebuildList(); clearEditor();
+    if (!persist(L"Đã xoá gõ tắt")) { entries.insert(entries.begin() + selected, removed); return; }
+    rebuildList(); clearEditor();
 }
 
 static bool readUtf8File(const std::wstring& path, std::string& out) {
@@ -178,7 +183,8 @@ static void importOpenKey() {
         if (it == entries.end()) { entries.push_back(e); ++added; }
         else { it->replacement = e.replacement; ++replaced; }
     }
-    persist();
+    // Entries have already been merged above. If the atomic save fails, reload the last valid store.
+    if (!persist()) { loadEntries(); rebuildList(); return; }
     rebuildList(); clearEditor();
     std::wstring msg = L"Đã nhập " + std::to_wstring(added) + L" mục mới";
     if (replaced) msg += L", cập nhật " + std::to_wstring(replaced) + L" mục";
