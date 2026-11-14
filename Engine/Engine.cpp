@@ -946,6 +946,27 @@ void insertW(const Uint16& data, const bool& isCaps) {
     
     findAndCalculateVowel();
     
+    // Do not strip horn/breve from an already completed syllable (closed coda or
+    // triphthong) on a trailing 'w': keep "được" + 'w' as "đượcw" so Backspace leaves
+    // "được" intact and restore-if-invalid preserves both 'w' keys ("dduowcjw").
+    if (data == KEY_W && vowelCount > 0 && ((VEI + 1 < _index) || (vowelCount >= 3))) {
+        bool clusterHasToneW = false;
+        for (ii = VSI; ii <= VEI; ii++) {
+            if ((TypingWord[ii] & TONEW_MASK) && !(TypingWord[ii] & STANDALONE_MASK)) {
+                clusterHasToneW = true;
+                break;
+            }
+        }
+        if (clusterHasToneW) {
+            insertKey(data, isCaps);
+            tempDisableKey = true;
+            hCode = vDoNothing;
+            hBPC = 0;
+            hNCC = 0;
+            return;
+        }
+    }
+    
     //remove ^ tone
     for (ii = VSI; ii <= VEI; ii++) {
         TypingWord[ii] &= ~TONE_MASK;
