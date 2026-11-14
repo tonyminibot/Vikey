@@ -12,4 +12,7 @@ std::wstring path();
 /// Missing file is a successful empty list. Malformed/oversized files fail safely.
 TextExpansionIOResult load();
 
+/// Atomically replace the native JSON store. Returns false and an optional short error on failure.
+bool save(const std::vector<TextExpansionEntry>& entries, std::string* error = nullptr);
+
 }} // namespace
