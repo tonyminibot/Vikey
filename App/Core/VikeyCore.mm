@@ -1386,10 +1386,10 @@ extern "C" {
         }
 
         // an excluded app (remote desktop...) is in front: every key goes through as typed
-        if (_frontExcluded) return event;
+        if (_frontExcluded) { ResetTextExpansion(); return event; }
 
         // the emoji picker reads raw keys for its search (it does its own Telex reading)
-        if (vEmojiOpen) return event;
+        if (vEmojiOpen) { ResetTextExpansion(); return event; }
 
         // Backspace right after an automatic correction (D61): the first takes only the break key and keeps the
         // correction ("được " ⌫ "," -> "được,"); a second one right after undoes it. Any other key or click ends that chance
@@ -1402,6 +1402,8 @@ extern "C" {
             _autoFixUndo.active = keepUndo;
             if (type == kCGEventKeyDown) TLNoteKey(_keycode, _flag); else TLNoteClick();
         }
+        if (type == kCGEventLeftMouseDown || type == kCGEventRightMouseDown || type == kCGEventOtherMouseDown)
+            ResetTextExpansion();
 
         // Also check correct event hooked
         if ((type != kCGEventKeyDown) && (type != kCGEventKeyUp) &&
@@ -1410,6 +1412,11 @@ extern "C" {
             return event;
         
         _proxy = proxy;
+
+        // Text expansion wins at a boundary before Auto Switch can reinterpret the trigger.
+        // Replacement events carry VIKEY_EVENT_TAG and therefore cannot recursively expand.
+        if (type == kCGEventKeyDown && !(OTHER_CONTROL_KEY) && TryTextExpansionBoundary())
+            return NULL;
         
         //If is in english mode
         if (vLanguage == 0) {
@@ -1423,8 +1430,11 @@ extern "C" {
             if (vUseSmartSwitchKey && (_flag & (kCGEventFlagMaskCommand | kCGEventFlagMaskControl))) {
                 NudgeSiteCheck();
             }
-            if (vAutoSwitchByTyping && HandleEnglishKeyForAutoSwitch())
+            if (vAutoSwitchByTyping && HandleEnglishKeyForAutoSwitch()) {
+                ResetTextExpansion();
                 return NULL;
+            }
+            TrackUnprocessedTextExpansionKey(event);
             return event;
         }
         
@@ -1439,7 +1449,7 @@ extern "C" {
         }
 
         //another keyboard language (Japanese, Chinese...) is active: stay out of its way
-        if (vOtherLanguage && _otherInputLanguage) return event;
+        if (vOtherLanguage && _otherInputLanguage) { ResetTextExpansion(); return event; }
         
         //handle keyboard
         if (type == kCGEventKeyDown) {
@@ -1451,13 +1461,18 @@ extern "C" {
                             _flag & kCGEventFlagMaskShift ? 1 : (_flag & kCGEventFlagMaskAlphaShift ? 2 : 0),
                             (OTHER_CONTROL_KEY) && !PLAIN_ARROW);
             if (pData->code == vDoNothing) { //do nothing
+                TrackUnprocessedTextExpansionKey(event);
                 return event;
             } else if (pData->code == vWillProcess || pData->code == vRestore || pData->code == vRestoreAndStartNewSession) { //handle result signal
                 
                 bool autoSwitchAtBreak = vAutoSwitchRequest == 0 && !IsLetterKey(_keycode);
                 int correctedCount = pData->newCharCount;
+                SyncTextExpansionFromEngine();
                 SendEngineOutput();
-                if (vAutoSwitchRequest == 0) ApplyAutoSwitchToEnglish(correctedCount, autoSwitchAtBreak);
+                if (vAutoSwitchRequest == 0) {
+                    ResetTextExpansion();
+                    ApplyAutoSwitchToEnglish(correctedCount, autoSwitchAtBreak);
+                }
             }
             
             return NULL;
@@ -1580,6 +1595,7 @@ static NSTimer* _watchdog = nil;
 
 + (void)setLanguageByUser:(int)language {
     if (vLanguage == language) return;
+    ResetTextExpansion();
     vLanguage = language;
     PauseAutoSwitchAfterManual();
     TLManual(@"menu", language);
@@ -1611,7 +1627,7 @@ static NSTimer* _watchdog = nil;
 }
 
 + (void)setEmojiHotkeyHandler:(void (^)(void))handler { vEmojiHandler = [handler copy]; }
-+ (void)setEmojiPickerOpen:(BOOL)open { vEmojiOpen = open; }
++ (void)setEmojiPickerOpen:(BOOL)open { vEmojiOpen = open; ResetTextExpansion(); }
 
 + (int)hotkeyKeyCodeForEvent:(NSEvent *)event {
     // the tap matches hotkeys against the key code mapped back to QWERTY (Dvorak, AZERTY...): record the same
@@ -1623,6 +1639,7 @@ static NSTimer* _watchdog = nil;
 + (void)resetTyping {
     ResetEnglishWord(true);
     _autoFixUndo.active = false;
+    ResetTextExpansion();
     startNewSession();
 }
 
