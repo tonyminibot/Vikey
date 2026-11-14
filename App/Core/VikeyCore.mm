@@ -125,6 +125,18 @@ extern "C" {
 
     int _languageTemp = 0; //use for smart switch key
     vector<Byte> savedSmartSwitchKeyData; ////use for smart switch key
+
+    // ---- Text expansion ("Gõ tắt") ---------------------------------------------------
+    static TextExpansionManager _textExpansion;
+    static TextExpansionSession _textExpansionSession;
+    static bool _textExpansionEnabled = true;
+    static bool _textExpansionInEnglish = true;
+    static bool _textExpansionAutoCaps = false;
+    static void ResetTextExpansion() { _textExpansionSession.reset(); }
+    static void ReloadTextExpansions() {
+        TextExpansionIOResult r = text_expansion_store_mac::load();
+        if (r.ok) _textExpansion.setEntries(r.entries);
+    }
     
     NSString* _frontMostApp = @"UnknownApp";
 
@@ -416,6 +428,10 @@ extern "C" {
         _textExpansionInEnglish = get(@"UseMacroInEnglishMode", 1) != 0;
         _textExpansionAutoCaps = get(@"vAutoCapsMacro", 0) != 0;
         ReloadTextExpansions();
+        _textExpansionEnabled = get(@"UseMacro", 1) != 0;
+        _textExpansionInEnglish = get(@"UseMacroInEnglishMode", 1) != 0;
+        _textExpansionAutoCaps = get(@"vAutoCapsMacro", 0) != 0;
+        ReloadTextExpansions();
         int hotkey = get(@"SwitchKeyStatus", 0);
         vSwitchKeyStatus = hotkey ? hotkey : 0x7A000206;  // default ⌥Z
         vEmojiHotkey = get(@"EmojiPicker", 0) ? get(@"EmojiHotkey", 0) : 0;
@@ -569,6 +585,7 @@ extern "C" {
     
     void OnInputMethodChanged() {
         ResetEnglishWord(true);   // switched from the menu or the control panel: nothing to look back on
+        ResetTextExpansion();
         ResetTextExpansion();
         if (vUseSmartSwitchKey) {
             queryFrontMostApp();
@@ -739,6 +756,113 @@ extern "C" {
                 return true;
         }
         return false;
+    }
+
+
+    static bool SensitiveTextExpansionContext() {
+        static NSSet* excluded;
+        if (!excluded) excluded = [NSSet setWithArray:@[
+            @"com.1password.1password", @"com.agilebits.onepassword7", @"com.bitwarden.desktop", @"com.apple.Passwords",
+            @"com.apple.keychainaccess", @"com.lastpass.LastPass", @"com.dashlane.dashlanephonefinal", @"in.sinew.Enpass-Desktop",
+            @"com.keepassxc.keepassxc", @"com.sinew.Enpass-Desktop", @"com.nordpass.macos.NordPass",
+            @"com.apple.Terminal", @"com.googlecode.iterm2", @"dev.warp.Warp-Stable", @"com.mitchellh.ghostty",
+            @"io.alacritty", @"net.kovidgoyal.kitty", @"com.github.wez.wezterm", @"co.zeit.hyper", @"com.termius-dmg.mac"
+        ]];
+        return IsSecureEventInputEnabled() || [excluded containsObject:FRONT_APP];
+    }
+
+    static bool IsTextExpansionBoundary(const Uint16& key, bool shift) {
+        if (key == KEY_SPACE || key == KEY_RETURN || key == KEY_ENTER || key == KEY_TAB) return true;
+        if (!shift && (key == KEY_COMMA || key == KEY_DOT || key == KEY_SEMICOLON || key == KEY_RIGHT_BRACKET)) return true;
+        if (shift && (key == KEY_SEMICOLON || key == KEY_SLASH || key == KEY_1 || key == KEY_0 || key == KEY_RIGHT_BRACKET)) return true;
+        return false;
+    }
+
+    static char16_t VisiblePhysicalChar(const Uint16& key) {
+        bool shift = (_flag & kCGEventFlagMaskShift) != 0;
+        bool capsLock = (_flag & kCGEventFlagMaskAlphaShift) != 0;
+        bool upper = IsLetterKey(key) ? (shift != capsLock) : shift;
+        Uint16 ch = keyCodeToCharacter(key | (upper ? CAPS_MASK : 0));
+        return (char16_t)ch;
+    }
+
+    static std::u16string EngineInsertedText() {
+        std::u16string out;
+        for (int k = pData->newCharCount - 1; k >= 0; --k) {
+            Uint32 c = pData->charData[k];
+            Uint16 ch = (c & CHAR_CODE_MASK) ? (Uint16)(c & 0xFFFF) : keyCodeToCharacter(c);
+            if (ch) out.push_back((char16_t)ch);
+        }
+        return out;
+    }
+
+    static int TextExpansionTokenScalarCount() {
+        const std::u16string& token = _textExpansionSession.token();
+        int count = 0;
+        for (std::size_t i = 0; i < token.size(); ++i) {
+            char16_t c = token[i];
+            if (c >= 0xD800 && c <= 0xDBFF && i + 1 < token.size() && token[i + 1] >= 0xDC00 && token[i + 1] <= 0xDFFF) ++i;
+            ++count;
+        }
+        return count;
+    }
+
+    static void SyncTextExpansionFromEngine() {
+        if (pData->code == vWillProcess) {
+            if (pData->backspaceCount > TextExpansionTokenScalarCount()) { ResetTextExpansion(); return; }
+            _textExpansionSession.applyEdit(pData->backspaceCount, EngineInsertedText());
+        } else if (pData->code == vRestore || pData->code == vRestoreAndStartNewSession) {
+            ResetTextExpansion();
+        }
+    }
+
+    static void TrackUnprocessedTextExpansionKey() {
+        if (!_textExpansionEnabled || (vLanguage == 0 && !_textExpansionInEnglish) ||
+            SensitiveTextExpansionContext() || _frontExcluded || (vOtherLanguage && _otherInputLanguage)) {
+            ResetTextExpansion(); return;
+        }
+        if ((OTHER_CONTROL_KEY) && !PLAIN_ARROW) { ResetTextExpansion(); return; }
+        if (_keycode == KEY_DELETE) { _textExpansionSession.erase(1); return; }
+        if (IsTextExpansionBoundary(_keycode, (_flag & kCGEventFlagMaskShift) != 0)) { ResetTextExpansion(); return; }
+
+        char16_t ch = VisiblePhysicalChar(_keycode);
+        if (ch) _textExpansionSession.append(ch); else ResetTextExpansion();
+    }
+
+    static bool TryTextExpansionBoundary() {
+        bool shift = (_flag & kCGEventFlagMaskShift) != 0;
+        if (!IsTextExpansionBoundary(_keycode, shift)) return false;
+
+        bool allowed = _textExpansionEnabled && (vLanguage != 0 || _textExpansionInEnglish) &&
+                       !_frontExcluded && !(vOtherLanguage && _otherInputLanguage) && !SensitiveTextExpansionContext();
+        TextExpansionMatch match;
+        if (allowed && !_textExpansionSession.token().empty())
+            match = _textExpansion.find(_textExpansionSession.token(), _textExpansionAutoCaps);
+
+        ResetTextExpansion();
+        if (!match.matched) return false;
+
+        int removeCount = match.deleteCount;
+        if (shouldUseRecommendWorkaround(FRONT_APP)) {
+            SendEmptyCharacter();
+            ++removeCount;
+        }
+
+        if (removeCount > 0 && shouldUseSelectionReplacement(FRONT_APP)) {
+            for (int i = 0; i < removeCount; ++i) SendShiftAndLeftArrow();
+        } else {
+            for (int i = 0; i < removeCount; ++i) SendBackspace();
+        }
+
+        if (!match.replacement.empty())
+            PostText((const UniChar*)match.replacement.data(), (int)match.replacement.size());
+        SendKeyCode(_keycode, _flag);
+
+        _autoFixUndo.active = false;
+        ResetEnglishWord(true);
+        startNewSession();
+        vAutoSwitchForget();
+        return true;
     }
 
     static bool SensitiveTypingContext();
