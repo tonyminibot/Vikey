@@ -11,6 +11,7 @@ cmake --build "$root/Windows/build" --config Release
 if ($LASTEXITCODE) { exit 1 }
 $rc = 0
 & "$root/Tools/text_expansion/text_expansion_test.exe"; if ($LASTEXITCODE) { $rc = 1 }
+& "$root/Tools/text_expansion/text_expansion_io_test.exe"; if ($LASTEXITCODE) { $rc = 1 }
 if (-not $env:TMPDIR) { $env:TMPDIR = $env:TEMP }
 python "$as/rules/run_rules.py"; if ($LASTEXITCODE) { $rc = 1 }
 $mode = if ($args.Count -gt 0) { $args[0] } else { 'check' }
