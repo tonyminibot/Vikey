@@ -12,6 +12,8 @@ rc=0
 # Shared text-expansion matcher/session: pure C++17, independent of platform hooks.
 clang++ -std=c++17 -O2 -Wall -Wextra -pedantic -I$E -o ../text_expansion/text_expansion_test ../text_expansion/test.cpp $E/TextExpansion.cpp
 ../text_expansion/text_expansion_test || rc=1
+clang++ -std=c++17 -O2 -Wall -Wextra -pedantic -I$E -o ../text_expansion/text_expansion_io_test ../text_expansion/io_test.cpp $E/TextExpansionIO.cpp
+../text_expansion/text_expansion_io_test || rc=1
 env -u VIKEY_TELEX_STYLE python3 rules/run_rules.py || rc=1   # the default style (Telex), whatever the shell has
 VIKEY_TELEX_STYLE=1 python3 rules/run_rules.py telex_simple1.tsv || rc=1   # D56 Simple Telex styles
 VIKEY_TELEX_STYLE=2 python3 rules/run_rules.py telex_simple2.tsv || rc=1
