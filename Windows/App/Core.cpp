@@ -445,8 +445,20 @@ static std::u16string EngineInsertedText() {
     return out;
 }
 
+static int TextExpansionTokenScalarCount() {
+    const std::u16string& token = _textExpansionSession.token();
+    int count = 0;
+    for (std::size_t i = 0; i < token.size(); ++i) {
+        char16_t c = token[i];
+        if (c >= 0xD800 && c <= 0xDBFF && i + 1 < token.size() && token[i + 1] >= 0xDC00 && token[i + 1] <= 0xDFFF) ++i;
+        ++count;
+    }
+    return count;
+}
+
 static void SyncTextExpansionFromEngine() {
     if (pData->code == vWillProcess) {
+        if (pData->backspaceCount > TextExpansionTokenScalarCount()) { ResetTextExpansion(); return; }
         _textExpansionSession.applyEdit(pData->backspaceCount, EngineInsertedText());
     } else if (pData->code == vRestore || pData->code == vRestoreAndStartNewSession) {
         // Restore can replace an arbitrary part of the word (and sometimes re-send the triggering key).
@@ -679,6 +691,7 @@ static LRESULT CALLBACK keyboardHook(int nCode, WPARAM wParam, LPARAM lParam) {
     }
     if (_keycode == KEY_EMPTY) {   // F-keys, media keys...: not ours. A key typing a character still ends the word.
         cancelModifierHotkey();   // Ctrl+Shift+F5, Ctrl+Shift+numpad +: releasing Ctrl+Shift afterwards isn't the hotkey
+        if (k->vkCode == VK_PACKET) ResetTextExpansion();   // another input tool changed visible text behind our session
         if (unmodeledKeyEndsWord(k->vkCode)) { TLEndWord("other"); resetTyping(); }
         return CallNextHookEx(_kbHook, nCode, wParam, lParam);
     }
