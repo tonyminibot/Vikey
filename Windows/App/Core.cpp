@@ -3,6 +3,8 @@
 #include "KeyMap.h"
 #include "Prefs.h"
 #include "Engine.h"
+#include "TextExpansion.h"
+#include "TextExpansionStore.h"
 #include <psapi.h>
 #include <mmsystem.h>
 #include "resource.h"
@@ -63,6 +65,19 @@ static std::wstring _siteHost;                    // host of the browser tab in 
 static bool _otherInputLanguage = false;          // Japanese/Chinese IME layout active
 static int _languageTemp = 0;
 static std::vector<Byte> savedSmartSwitchKeyData;
+
+// ---- Text expansion ("Gõ tắt") -----------------------------------------------------------
+static TextExpansionManager _textExpansion;
+static TextExpansionSession _textExpansionSession;
+static bool _textExpansionEnabled = true;
+static bool _textExpansionInEnglish = true;
+static bool _textExpansionAutoCaps = false;
+
+static void ResetTextExpansion() { _textExpansionSession.reset(); }
+static void ReloadTextExpansions() {
+    TextExpansionIOResult r = text_expansion_store::load();
+    if (r.ok) _textExpansion.setEntries(r.entries);
+}
 
 // ---- Auto switch by typing (same state machine as VikeyCore.mm) --------------------------
 static Uint32 _enKeys[MAX_BUFF];
@@ -235,7 +250,7 @@ static void ApplySmartSwitch() {
 void onForegroundChanged() {
     queryFrontMostApp();
     _siteHost.clear();
-    ResetEnglishWord(true); _autoFixUndo.active = false;
+    ResetEnglishWord(true); _autoFixUndo.active = false; ResetTextExpansion();
     TLEndWord("app"); _tlApp = _frontApp;
     if (vUseSmartSwitchKey) ApplySmartSwitch();
     startNewSession();
@@ -243,7 +258,7 @@ void onForegroundChanged() {
 void onSiteChanged(const std::wstring& host) {
     if (host == _siteHost) return;
     _siteHost = host;
-    ResetEnglishWord(true); _autoFixUndo.active = false;
+    ResetEnglishWord(true); _autoFixUndo.active = false; ResetTextExpansion();
     if (vUseSmartSwitchKey) ApplySmartSwitch();
     startNewSession();
 }
@@ -281,6 +296,10 @@ void reloadSettings() {
     vAutoSwitchByTyping = AutoSwitchPaused() ? 0 : prefs::getInt(L"AutoSwitchByTyping", 1);
     vTypingLogKeys = prefs::getInt(L"TypingLogKeys", 1);
     vTypingLogEnabled = prefs::getInt(L"TypingLogEnabled", 0);
+    _textExpansionEnabled = prefs::getInt(L"UseMacro", 1) != 0;
+    _textExpansionInEnglish = prefs::getInt(L"UseMacroInEnglishMode", 1) != 0;
+    _textExpansionAutoCaps = prefs::getInt(L"vAutoCapsMacro", 0) != 0;
+    ReloadTextExpansions();
     int hotkey = prefs::getInt(L"SwitchKeyStatus", 0);
     vSwitchKeyStatus = hotkey ? hotkey : 0x7A000206;   // default Alt+Z (same bits as ⌥Z on macOS)
     vEmojiHotkey = prefs::getInt(L"EmojiPicker", 0) ? prefs::getInt(L"EmojiHotkey", 0) : 0;
@@ -351,7 +370,7 @@ static void cancelModifierHotkey() { _lastFlag = 0; if (_flag & (F_SHIFT | F_CON
 static void switchLanguage(const char* via) {
     PauseAutoSwitchAfterManual();
     _autoFixUndo.active = false;
-    ResetEnglishWord(true);
+    ResetEnglishWord(true); ResetTextExpansion();
     vLanguage = vLanguage == 0 ? 1 : 0;
     TLManual(via, vLanguage);
     if (HAS_BEEP(vSwitchKeyStatus)) PlaySwitchSound(vLanguage);
@@ -360,11 +379,11 @@ static void switchLanguage(const char* via) {
 }
 void setLanguageByUser(int lang) {
     if (vLanguage == lang) return;
-    PauseAutoSwitchAfterManual(); _autoFixUndo.active = false; ResetEnglishWord(true);
+    PauseAutoSwitchAfterManual(); _autoFixUndo.active = false; ResetEnglishWord(true); ResetTextExpansion();
     vLanguage = lang; TLManual("menu", vLanguage); VKLanguageChanged(true); startNewSession();
 }
 void setLanguageQuiet(int lang) {
-    _autoFixUndo.active = false; ResetEnglishWord(true); _autoPauseUntil = 0; vAutoSwitchByTyping = prefs::getInt(L"AutoSwitchByTyping", 1);
+    _autoFixUndo.active = false; ResetEnglishWord(true); ResetTextExpansion(); _autoPauseUntil = 0; vAutoSwitchByTyping = prefs::getInt(L"AutoSwitchByTyping", 1);
     vLanguage = lang ? 1 : 0; VKLanguageChanged(false); startNewSession();
 }
 int language() { return vLanguage; }
@@ -383,7 +402,7 @@ static bool windowsShortcut(DWORD vk, unsigned flag) {
 }
 /// Volume, media, browser and launch keys, PrintScreen: they go on and the picker stays open.
 static bool deviceKey(DWORD vk) { return vk == VK_SNAPSHOT || (vk >= VK_BROWSER_BACK && vk <= VK_LAUNCH_APP2); }
-void resetTyping() { ResetEnglishWord(true); _autoFixUndo.active = false; startNewSession(); }
+void resetTyping() { ResetEnglishWord(true); _autoFixUndo.active = false; ResetTextExpansion(); startNewSession(); }
 void insertText(const std::wstring& text) {
     resetTyping();
     batchText(text.c_str(), (int)text.size());   // KEYEVENTF_UNICODE per UTF-16 unit: surrogate pairs arrive as one character
@@ -395,6 +414,84 @@ static bool IsWhitespaceKey(Uint16 key) { return key == KEY_SPACE || key == KEY_
 static bool IsWordStartKey(Uint16 key, bool shift) { return IsWhitespaceKey(key) || (key == KEY_9 && shift) || key == KEY_LEFT_BRACKET || key == KEY_QUOTE; }
 static bool IsLetterKey(Uint16 key) { for (Uint16 k : {KEY_A,KEY_B,KEY_C,KEY_D,KEY_E,KEY_F,KEY_G,KEY_H,KEY_I,KEY_J,KEY_K,KEY_L,KEY_M,KEY_N,KEY_O,KEY_P,KEY_Q,KEY_R,KEY_S,KEY_T,KEY_U,KEY_V,KEY_W,KEY_X,KEY_Y,KEY_Z}) if (k == key) return true; return false; }
 static wchar_t CharacterOf(Uint32 data) { return (data & CHAR_CODE_MASK) ? (wchar_t)(data & 0xFFFF) : (wchar_t)keyCodeToCharacter(data); }
+
+
+static bool IsTextExpansionBoundary(Uint16 key, bool shift) {
+    if (key == KEY_SPACE || key == KEY_RETURN || key == KEY_ENTER || key == KEY_TAB ||
+        key == KEY_COMMA || key == KEY_DOT || key == KEY_SEMICOLON || key == KEY_RIGHT_BRACKET) return true;
+    if (shift && (key == KEY_SEMICOLON || key == KEY_SLASH || key == KEY_1 || key == KEY_0 ||
+                  key == KEY_RIGHT_BRACKET || key == KEY_LEFT_BRACKET)) return true;
+    return false;
+}
+
+static char16_t VisiblePhysicalChar(Uint16 key) {
+    bool shift = (_flag & F_SHIFT) != 0;
+    bool caps = (_flag & F_CAPS) != 0;
+    bool upper = IsLetterKey(key) ? (shift != caps) : shift;
+    Uint16 ch = keyCodeToCharacter(key | (upper ? CAPS_MASK : 0));
+    return (char16_t)ch;
+}
+
+static std::u16string EngineInsertedText() {
+    std::u16string out;
+    for (int k = pData->newCharCount - 1; k >= 0; --k) {
+        Uint32 c = pData->charData[k];
+        Uint16 ch = (c & CHAR_CODE_MASK) ? (Uint16)(c & 0xFFFF) : keyCodeToCharacter(c);
+        if (ch) out.push_back((char16_t)ch);
+    }
+    return out;
+}
+
+static void SyncTextExpansionFromEngine() {
+    if (pData->code == vWillProcess) {
+        _textExpansionSession.applyEdit(pData->backspaceCount, EngineInsertedText());
+    } else if (pData->code == vRestore || pData->code == vRestoreAndStartNewSession) {
+        // Restore can replace an arbitrary part of the word (and sometimes re-send the triggering key).
+        // A false negative on the next expansion is safer than matching stale screen text.
+        ResetTextExpansion();
+    }
+}
+
+static bool TryTextExpansionBoundary() {
+    bool shift = (_flag & F_SHIFT) != 0;
+    if (!IsTextExpansionBoundary(_keycode, shift)) return false;
+
+    bool allowed = _textExpansionEnabled && (vLanguage != 0 || _textExpansionInEnglish) &&
+                   !(vOtherLanguage && _otherInputLanguage);
+    TextExpansionMatch match;
+    if (allowed && !_textExpansionSession.token().empty())
+        match = _textExpansion.find(_textExpansionSession.token(), _textExpansionAutoCaps);
+
+    ResetTextExpansion();
+    if (!match.matched) return false;
+
+    batchBackspaces(match.deleteCount);
+    if (!match.replacement.empty()) {
+        std::vector<wchar_t> text;
+        text.reserve(match.replacement.size());
+        for (char16_t c : match.replacement) text.push_back((wchar_t)c);
+        batchText(text.data(), (int)text.size());
+    }
+    WORD vk = _keyVk ? (WORD)_keyVk : vkOf(_keycode);
+    if (vk) batchKey(vk, _keyExtended);
+    flushBatch();
+
+    _autoFixUndo.active = false;
+    ResetEnglishWord(true);
+    startNewSession();
+    vAutoSwitchForget();
+    return true;
+}
+
+static void TrackUnprocessedTextExpansionKey() {
+    if (OTHER_CONTROL_KEY) { ResetTextExpansion(); return; }
+    if (_keycode == KEY_DELETE) { _textExpansionSession.erase(1); return; }
+    if (IsTextExpansionBoundary(_keycode, (_flag & F_SHIFT) != 0)) { ResetTextExpansion(); return; }
+
+    char16_t ch = VisiblePhysicalChar(_keycode);
+    if (ch) _textExpansionSession.append(ch);
+    else ResetTextExpansion();
+}
 
 static void RememberAutoFix(int correctedCount) {
     _autoFixUndo.active = false;
@@ -422,7 +519,7 @@ static bool UndoAutoFixWithBackspace() {
     flushBatch();
     TLUndo();
     if (vLanguage != _autoFixUndo.language) { vLanguage = _autoFixUndo.language; VKLanguageChanged(true); }
-    startNewSession();
+    startNewSession(); ResetTextExpansion();
     ResetEnglishWord(false);   // the cursor is at the end of a word we didn't see typed
     // back in English with the typed keys on screen: they are the current word again, so typing on
     // ("vaay" + "j") is checked as a whole ("vaayj" -> "vậy"); the same word again stays as typed (D32)
@@ -600,21 +697,34 @@ static LRESULT CALLBACK keyboardHook(int nCode, WPARAM wParam, LPARAM lParam) {
     TLNoteKey(_keycode, _flag);
 
     updateOtherInputLanguage();   // every key: Win+Space can switch to a Japanese/Chinese IME in the same window
+
+    // Text expansion wins at a word boundary, before auto-switch gets a chance to reinterpret the trigger.
+    // Password fields returned above, and our injected replacement events are tagged and skipped at hook entry.
+    if (!OTHER_CONTROL_KEY && TryTextExpansionBoundary()) return 1;
+
     if (vLanguage == 0) {
-        if (vAutoSwitchByTyping && HandleEnglishKeyForAutoSwitch()) return 1;
+        if (vAutoSwitchByTyping && HandleEnglishKeyForAutoSwitch()) { ResetTextExpansion(); return 1; }
+        TrackUnprocessedTextExpansionKey();
         return CallNextHookEx(_kbHook, nCode, wParam, lParam);
     }
-    if (vOtherLanguage && _otherInputLanguage) return CallNextHookEx(_kbHook, nCode, wParam, lParam);
+    if (vOtherLanguage && _otherInputLanguage) { ResetTextExpansion(); return CallNextHookEx(_kbHook, nCode, wParam, lParam); }
 
     vAutoSwitchRequest = -1;
     vKeyHandleEvent(vKeyEvent::Keyboard, vKeyEventState::KeyDown, _keycode,
                     (_flag & F_SHIFT) ? 1 : ((_flag & F_CAPS) ? 2 : 0), OTHER_CONTROL_KEY);
-    if (pData->code == vDoNothing) return CallNextHookEx(_kbHook, nCode, wParam, lParam);
+    if (pData->code == vDoNothing) {
+        TrackUnprocessedTextExpansionKey();
+        return CallNextHookEx(_kbHook, nCode, wParam, lParam);
+    }
     if (pData->code == vWillProcess || pData->code == vRestore || pData->code == vRestoreAndStartNewSession) {
         bool autoSwitchAtBreak = vAutoSwitchRequest == 0 && !IsLetterKey(_keycode);
         int correctedCount = pData->newCharCount;
+        SyncTextExpansionFromEngine();
         SendEngineOutput();
-        if (vAutoSwitchRequest == 0) ApplyAutoSwitchToEnglish(correctedCount, autoSwitchAtBreak);
+        if (vAutoSwitchRequest == 0) {
+            ResetTextExpansion();
+            ApplyAutoSwitchToEnglish(correctedCount, autoSwitchAtBreak);
+        }
     }
     return 1;   // consumed
 }
@@ -627,7 +737,7 @@ static LRESULT CALLBACK mouseHook(int nCode, WPARAM wParam, LPARAM lParam) {
         }
         cancelModifierHotkey();   // Ctrl+Shift-click: the modifiers were for the click, so releasing them isn't the Ctrl+Shift hotkey
         _hotkeyVk = 0;   // a missed key-up (focus change, lock screen) must not swallow the next Alt+Z
-        _autoFixUndo.active = false; TLNoteClick();
+        _autoFixUndo.active = false; ResetTextExpansion(); TLNoteClick();
         if (vLanguage == 0) ResetEnglishWord(true);
         else vKeyHandleEvent(vKeyEvent::Mouse, vKeyEventState::MouseDown, 0);
     }
@@ -648,7 +758,7 @@ bool start() {
     _mouseHook = SetWindowsHookExW(WH_MOUSE_LL, mouseHook, inst, 0);
     _fgHook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr, foregroundHook, 0, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
     // focus moves (into a password field, say) are checked right away, not only on the 1 s poll
-    _focusHook = SetWinEventHook(EVENT_OBJECT_FOCUS, EVENT_OBJECT_FOCUS, nullptr, [](HWINEVENTHOOK, DWORD, HWND h, LONG obj, LONG child, DWORD, DWORD) { site::pollPassword(h, obj, child); }, 0, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+    _focusHook = SetWinEventHook(EVENT_OBJECT_FOCUS, EVENT_OBJECT_FOCUS, nullptr, [](HWINEVENTHOOK, DWORD, HWND h, LONG obj, LONG child, DWORD, DWORD) { ResetTextExpansion(); site::pollPassword(h, obj, child); }, 0, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
     return _kbHook != nullptr;
 }
 void stop() {
