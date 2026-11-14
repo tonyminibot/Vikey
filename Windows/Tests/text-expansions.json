@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "entries": [
+    {"trigger": "dc", "replacement": "được"},
+    {"trigger": "ss", "replacement": "Sun Santa"},
+    {"trigger": "ph", "replacement": "phụ huynh"},
+    {"trigger": "sig", "replacement": "Harry Tran\nSun Santa"}
+  ]
+}
