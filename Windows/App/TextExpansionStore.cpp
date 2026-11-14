@@ -46,4 +46,34 @@ TextExpansionIOResult load() {
     return textExpansionParseJson(data);
 }
 
+bool save(const std::vector<TextExpansionEntry>& entries, std::string* error) {
+    std::string data = textExpansionSerializeJson(entries);
+    std::wstring dst = path();
+    std::wstring tmp = dst + L".tmp";
+
+    HANDLE h = CreateFileW(tmp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
+                           FILE_ATTRIBUTE_NORMAL | FILE_FLAG_WRITE_THROUGH, nullptr);
+    if (h == INVALID_HANDLE_VALUE) {
+        if (error) *error = "cannot create temporary text-expansions.json";
+        return false;
+    }
+
+    DWORD written = 0;
+    BOOL ok = data.empty() || WriteFile(h, data.data(), (DWORD)data.size(), &written, nullptr);
+    if (ok) ok = FlushFileBuffers(h);
+    CloseHandle(h);
+    if (!ok || written != data.size()) {
+        DeleteFileW(tmp.c_str());
+        if (error) *error = "cannot write text-expansions.json";
+        return false;
+    }
+
+    if (!MoveFileExW(tmp.c_str(), dst.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+        DeleteFileW(tmp.c_str());
+        if (error) *error = "cannot replace text-expansions.json";
+        return false;
+    }
+    return true;
+}
+
 }} // namespace
