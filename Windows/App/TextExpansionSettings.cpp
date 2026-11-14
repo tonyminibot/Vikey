@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <string>
 #include <vector>
+#include <utility>
 
 #pragma comment(lib, "comctl32.lib")
 #pragma comment(lib, "comdlg32.lib")
@@ -22,7 +23,7 @@ enum {
     TX_TRIGGER, TX_REPLACEMENT, TX_NEW, TX_SAVE, TX_DELETE, TX_IMPORT, TX_EXPORT, TX_STATUS
 };
 
-static HWND win = nullptr, list = nullptr, search = nullptr, trigger = nullptr, replacement = nullptr;
+static HWND win = nullptr, ownerWin = nullptr, list = nullptr, search = nullptr, trigger = nullptr, replacement = nullptr;
 static HWND enable = nullptr, english = nullptr, autoCaps = nullptr, del = nullptr, status = nullptr;
 static HFONT font = nullptr, fontBold = nullptr;
 static std::vector<TextExpansionEntry> entries;
@@ -126,6 +127,7 @@ static bool saveEditor() {
         MessageBoxW(win, L"Từ gõ tắt không được chứa khoảng trắng hoặc xuống dòng.", L"Vikey", MB_ICONWARNING); SetFocus(trigger); return false;
     }
 
+    std::vector<TextExpansionEntry> before = entries;
     std::u16string t = toU16(tw), r = toU16(rw);
     int duplicate = -1;
     for (std::size_t i = 0; i < entries.size(); ++i)
@@ -138,7 +140,7 @@ static bool saveEditor() {
         entries[selected] = {t, r};
     } else entries.push_back({t, r});
 
-    if (!persist(L"Đã lưu gõ tắt")) return false;
+    if (!persist(L"Đã lưu gõ tắt")) { entries = std::move(before); return false; }
     rebuildList(); clearEditor(); return true;
 }
 static void deleteSelected() {
@@ -203,6 +205,7 @@ static void exportOpenKey() {
 static void setTogglePref(HWND c, const wchar_t* key) {
     prefs::setInt(key, SendMessageW(c, BM_GETCHECK, 0, 0) == BST_CHECKED ? 1 : 0);
     core::reloadSettings(); refreshEnabled();
+    if (ownerWin && IsWindow(ownerWin)) PostMessageW(ownerWin, WM_APP + 20, 0, 0);
 }
 static void layout(HWND h) {
     RECT rc; GetClientRect(h, &rc);
@@ -248,7 +251,7 @@ static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
         }
         break; }
     case WM_CLOSE: DestroyWindow(h); return 0;
-    case WM_DESTROY: win = list = search = trigger = replacement = enable = english = autoCaps = del = status = nullptr; selected = -1; return 0;
+    case WM_DESTROY: win = ownerWin = list = search = trigger = replacement = enable = english = autoCaps = del = status = nullptr; selected = -1; return 0;
     }
     return DefWindowProcW(h,m,w,l);
 }
@@ -256,7 +259,8 @@ static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
 } // namespace
 
 void showTextExpansionSettings(HINSTANCE inst, HWND owner) {
-    if (win) { ShowWindow(win, SW_SHOW); SetForegroundWindow(win); return; }
+    if (win) { ownerWin = owner; ShowWindow(win, SW_SHOW); SetForegroundWindow(win); return; }
+    ownerWin = owner;
     INITCOMMONCONTROLSEX cc = {sizeof(cc), ICC_LISTVIEW_CLASSES}; InitCommonControlsEx(&cc);
     if (!font) {
         font = CreateFontW(-15,0,0,0,FW_NORMAL,0,0,0,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,L"Segoe UI");
