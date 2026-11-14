@@ -61,6 +61,8 @@ static void testJson() {
     expect(!textExpansionParseJson("{\"version\":1,\"entries\":[}").ok, "JSON rejects malformed syntax");
     expect(!textExpansionParseJson("{\"version\":1,\"entries\":[{\"trigger\":\"x\",\"replacement\":\"\\uD83D\"}]}").ok,
            "JSON rejects unpaired surrogate");
+    expect(!textExpansionParseJson("{\"version\":1,\"entries\":[],\"bad\":1+2}").ok,
+           "JSON rejects malformed number in unknown field");
     std::string bom = "\xEF\xBB\xBF{\"version\":1,\"entries\":[]}";
     expect(textExpansionParseJson(bom).ok, "JSON accepts UTF-8 BOM");
 }
@@ -71,15 +73,18 @@ static void testOpenKeyText() {
         {u"ph", u"phụ huynh: lớp 2"},
         {u"heart", u"❤️"},
         {u"multi", u"line 1\nline 2"},
+        {u":abc", u"leading colon"},
         {u"a:b", u"not representable"},
     };
     auto ex = textExpansionExportOpenKey(src);
-    expect(ex.ok && ex.exported == 3 && ex.skipped == 2, "OpenKey export counts unsupported lines");
+    expect(ex.ok && ex.exported == 4 && ex.skipped == 2, "OpenKey export counts unsupported lines");
     auto r = textExpansionImportOpenKey(ex.text);
-    expect(r.ok && r.entries.size() == 3, "OpenKey export imports back");
+    expect(r.ok && r.entries.size() == 4, "OpenKey export imports back");
     expect(r.entries[0].replacement == u"được", "OpenKey Vietnamese round trip");
     expect(r.entries[1].replacement == u"phụ huynh: lớp 2", "OpenKey preserves colon in replacement");
     expect(r.entries[2].replacement == u"❤️", "OpenKey preserves emoji");
+    expect(r.entries[3].trigger == u":abc" && r.entries[3].replacement == u"leading colon",
+           "OpenKey export/import preserves leading-colon trigger");
 
     auto crlf = textExpansionImportOpenKey(
         ";Compatible OpenKey Macro Data file for UniKey*** version=1 ***\r\n"

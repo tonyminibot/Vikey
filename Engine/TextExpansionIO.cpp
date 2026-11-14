@@ -247,8 +247,19 @@ private:
         }
         for (const char* x : {"true","false","null"}) { std::size_t n = std::strlen(x); if (s.compare(p,n,x)==0) { p += n; return true; } }
         std::size_t b = p; if (p < s.size() && s[p] == '-') ++p;
-        if (p >= s.size() || !std::isdigit((unsigned char)s[p])) { p = b; return false; }
-        while (p < s.size() && (std::isdigit((unsigned char)s[p]) || s[p]=='.' || s[p]=='e' || s[p]=='E' || s[p]=='+' || s[p]=='-')) ++p;
+        if (p >= s.size()) { p = b; return false; }
+        if (s[p] == '0') ++p;
+        else if (std::isdigit((unsigned char)s[p])) while (p < s.size() && std::isdigit((unsigned char)s[p])) ++p;
+        else { p = b; return false; }
+        if (p < s.size() && s[p] == '.') {
+            ++p; if (p >= s.size() || !std::isdigit((unsigned char)s[p])) { p = b; return false; }
+            while (p < s.size() && std::isdigit((unsigned char)s[p])) ++p;
+        }
+        if (p < s.size() && (s[p] == 'e' || s[p] == 'E')) {
+            ++p; if (p < s.size() && (s[p] == '+' || s[p] == '-')) ++p;
+            if (p >= s.size() || !std::isdigit((unsigned char)s[p])) { p = b; return false; }
+            while (p < s.size() && std::isdigit((unsigned char)s[p])) ++p;
+        }
         return p > b;
     }
 };
@@ -281,8 +292,11 @@ TextExpansionExportResult textExpansionExportOpenKey(const std::vector<TextExpan
     TextExpansionExportResult r; r.ok = true;
     r.text = ";Compatible OpenKey Macro Data file for UniKey*** version=1 ***\n";
     for (const auto& e : entries) {
+        std::size_t colon = e.trigger.find(u':');
+        bool safeColon = colon == std::u16string::npos ||
+                         (colon == 0 && e.trigger.find(u':', 1) == std::u16string::npos);
         if (e.trigger.empty() || e.replacement.empty() || lineBreak(e.trigger) || lineBreak(e.replacement) ||
-            e.trigger.find(u':') != std::u16string::npos) { ++r.skipped; continue; }
+            !safeColon) { ++r.skipped; continue; }
         std::string a,b;
         if (!utf16To8(e.trigger,a) || !utf16To8(e.replacement,b)) { ++r.skipped; continue; }
         r.text += a + ":" + b + "\n"; ++r.exported;
