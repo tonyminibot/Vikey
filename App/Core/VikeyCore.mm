@@ -273,6 +273,22 @@ extern "C" {
     static bool _isQwertyLayout = true;
     static bool _otherInputLanguage = false;   // the active input source is for another language (Japanese, Chinese...)
 
+    static NSString* const kKeyboardOverrides = @"KeyboardOverrides";   // input source id -> 1 (Vikey types) / 0 (Vikey stays out)
+
+    /// Is this input source for another language (Japanese, Chinese...)? That is Vikey's own guess, before the user's choice.
+    static bool InputSourceIsOtherLanguage(TISInputSourceRef isource) {
+        CFArrayRef languages = (CFArrayRef)TISGetInputSourceProperty(isource, kTISPropertyInputSourceLanguages);
+        if (!languages || CFArrayGetCount(languages) == 0) return false;
+        NSString* lang = (__bridge NSString*)(CFStringRef)CFArrayGetValueAtIndex(languages, 0);
+        if (lang.length == 0) {
+            // A layout that names no primary language (a custom .keylayout, Unicode Hex Input, Pinyin/Hangul
+            // layouts): the list is just alphabetical, so judge by whether it types ASCII letters.
+            NSNumber* ascii = (__bridge NSNumber*)TISGetInputSourceProperty(isource, kTISPropertyInputSourceIsASCIICapable);
+            return !ascii.boolValue;
+        }
+        return ![lang isLike:@"en"];
+    }
+
     /// Dvorak, Colemak, AZERTY...: map each key back to its QWERTY position so Telex works.
     void VKUpdateLayoutCompat() {
         TISInputSourceRef src = TISCopyCurrentKeyboardLayoutInputSource();
@@ -286,14 +302,30 @@ extern "C" {
         if (src) CFRelease(src);
         // computed once per input-source change instead of on every keystroke
         _otherInputLanguage = false;
+        NSString* srcID = nil;
         TISInputSourceRef isource = TISCopyCurrentKeyboardInputSource();
         if (isource) {
-            CFArrayRef languages = (CFArrayRef)TISGetInputSourceProperty(isource, kTISPropertyInputSourceLanguages);
-            if (languages && CFArrayGetCount(languages) > 0) {
-                NSString* lang = (__bridge NSString*)(CFStringRef)CFArrayGetValueAtIndex(languages, 0);
-                _otherInputLanguage = ![lang isLike:@"en"];
-            }
+            _otherInputLanguage = InputSourceIsOtherLanguage(isource);
+            // the user's own choice for this keyboard (settings > Bàn phím) beats the guess above
+            srcID = [(__bridge NSString*)TISGetInputSourceProperty(isource, kTISPropertyInputSourceID) copy];
+            NSNumber* own = srcID ? [[NSUserDefaults standardUserDefaults] dictionaryForKey:kKeyboardOverrides][srcID] : nil;
+            if (own) _otherInputLanguage = !own.boolValue;
             CFRelease(isource);
+        }
+        bool stayOut = vOtherLanguage && _otherInputLanguage;
+        // A keyboard Vikey stays out of: its keys never reach the engine, so a correction pending on the keyboard just left
+        // must not be undone there (D61 reads Backspace before the guard in the callback).
+        if (stayOut) _autoFixUndo.active = false;
+        // Another keyboard, or Vikey turned on or off for it: the word in progress was not followed across the change, so
+        // start over (the engine session and the English word, as an app switch does). A settings reload that leaves the
+        // keyboard and its state as they were keeps the word.
+        static NSString* lastSourceID = nil;
+        static bool lastStayOut = false, haveLast = false;
+        bool changed = haveLast && (stayOut != lastStayOut || (srcID != lastSourceID && ![srcID isEqualToString:lastSourceID]));
+        lastSourceID = srcID; lastStayOut = stayOut; haveLast = true;
+        if (changed) {
+            ResetEnglishWord(true);
+            startNewSession();
         }
     }
 
@@ -357,6 +389,10 @@ extern "C" {
 
     int VKAutoSwitchForFrontApp() { return AutoSwitchForApp(_frontMostApp); }
     int VKFrontAppExcluded() { return _frontExcluded ? 1 : 0; }
+    int VKInputSourceIgnoredByDefault(NSString* sourceID) {
+        NSArray* found = CFBridgingRelease(TISCreateInputSourceList((__bridge CFDictionaryRef)@{(__bridge NSString*)kTISPropertyInputSourceID: sourceID}, true));
+        return found.count > 0 && InputSourceIsOtherLanguage((__bridge TISInputSourceRef)found[0]) ? 1 : 0;
+    }
     NSString* VKFrontAppName() {
         NSRunningApplication* a = [NSRunningApplication runningApplicationsWithBundleIdentifier:_frontMostApp].firstObject;
         return a.localizedName ?: _frontMostApp;
@@ -1341,6 +1377,7 @@ extern "C" {
     void OnAppForExclusion(void);
     int VKAutoSwitchForFrontApp(void);
     int VKFrontAppExcluded(void);
+    int VKInputSourceIgnoredByDefault(NSString* sourceID);
     NSString* VKFrontAppName(void);
     void VKSetAutoSwitchForFrontApp(int on);
 }
@@ -1456,6 +1493,7 @@ static NSTimer* _watchdog = nil;
 
 + (BOOL)autoSwitchEnabledForFrontApp { return VKAutoSwitchForFrontApp() != 0; }
 + (BOOL)frontAppIsExcluded { return VKFrontAppExcluded() != 0; }
++ (BOOL)inputSourceIsIgnoredByDefault:(NSString *)sourceID { return VKInputSourceIgnoredByDefault(sourceID) != 0; }
 + (NSString *)frontAppName { return VKFrontAppName(); }
 + (void)setAutoSwitchForFrontApp:(BOOL)on { VKSetAutoSwitchForFrontApp(on ? 1 : 0); }
 

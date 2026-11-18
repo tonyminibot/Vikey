@@ -5,6 +5,19 @@ Each entry records what was asked, what was decided, and its status. Newest firs
 
 Status values: **Shipped** (in a build Tony has), **Agreed** (decided, not built yet), **Rejected**.
 
+## 68. A "Bàn phím" tab: the user chooses which keyboards Vikey types on (Mac)
+
+**Status:** Proposed (pull request). Not in a build yet.
+
+**Problem.** Vikey guesses from a keyboard's language whether to stay out of the way (Japanese, Chinese, Korean...). The guess can be wrong for a keyboard the user made, and there was no way to change it.
+
+**Decision.**
+- A new "Bàn phím" tab lists keyboards the user added, each with a switch (Vikey types on it or not). "Thêm bàn phím" adds any keyboard macOS has, custom layouts included; the minus button removes it. A keyboard not in the list keeps Vikey's own guess. The choice beats the guess, both ways (it can turn Vikey on for a keyboard it would skip).
+
+**Tests.** Mac app level, run by hand on a Mac (see the pull request). `Engine/` and the other platforms are untouched.
+
+---
+
 ## 67. Each opening of the keyboard frees its views; the keyboard's memory is tested (iOS)
 
 **Status:** Agreed (built), 2026-11-18 (Tony: "vikey keyboard still crash, I see this just now"; "Pls add more tests to ensure vikey doesn't go pass 40MB mem usage ever").
