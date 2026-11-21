@@ -291,7 +291,14 @@ extern "C" {
             CFArrayRef languages = (CFArrayRef)TISGetInputSourceProperty(isource, kTISPropertyInputSourceLanguages);
             if (languages && CFArrayGetCount(languages) > 0) {
                 NSString* lang = (__bridge NSString*)(CFStringRef)CFArrayGetValueAtIndex(languages, 0);
-                _otherInputLanguage = ![lang isLike:@"en"];
+                if (lang.length == 0) {
+                    // A layout that names no primary language (a custom .keylayout, Unicode Hex Input, Pinyin/Hangul
+                    // layouts): the list is just alphabetical, so judge by whether it types ASCII letters.
+                    NSNumber* ascii = (__bridge NSNumber*)TISGetInputSourceProperty(isource, kTISPropertyInputSourceIsASCIICapable);
+                    _otherInputLanguage = !ascii.boolValue;
+                } else {
+                    _otherInputLanguage = ![lang isLike:@"en"];
+                }
             }
             CFRelease(isource);
         }
