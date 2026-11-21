@@ -14,6 +14,12 @@ undo_backspace	vi	more \b\b	moẻ
 late_comma_keeps_fix_D61	vi	more \b,	more,
 identifier_guard	en	obj.dir my_var 	obj.dir my_var 
 hotkey_switch	vi	{alt+z}tieng 	tieng 
+winspace_switch	vi	{win+space}tieng	tieng
+emoji_choose_enter_inserts	vi	{emoji}{emoji-select-rocket}	ANY_EMOJI
+emoji_alt_d_swallowed	vi	{emoji-alt-d}	picker-open-no-menu
+emoji_search_enter_inserts	vi	{emoji}{emoji-search-rocket}{emoji-enter}	🚀
+emoji_search_click_inserts	vi	{emoji}{emoji-search-rocket}{emoji-click-rocket}	🚀
+emoji_physical_click_inserts	vi	{emoji}{emoji-search-rocket}{emoji-physical-click}	🚀
 hotkey_alt_held_twice	vi	{down:alt}zz{up:alt}vieetj 	việt 
 hotkey_held_switches_once	vi	{down:alt}{down:z}{down:z}{down:z}{up:z}{up:alt}vieetj 	vieetj 
 undo_then_continue_D32	en	vaay \b\bj 	vậy 

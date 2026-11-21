@@ -52,8 +52,14 @@ static HHOOK _kbHook = nullptr, _mouseHook = nullptr;
 static HWINEVENTHOOK _focusHook = nullptr, _fgHook = nullptr;
 static vKeyHookState* pData = nullptr;
 static unsigned _flag = 0, _lastFlag = 0;
+static unsigned _trackedModifiers = 0;   // LL-hook state survives synthetic modifier chords before Windows updates GetAsyncKeyState
 static bool _modifierChordUsed = false;   // the modifiers held went with a click or another key: no modifier-only hotkey until all are released
 static DWORD _hotkeyVk = 0;               // the hotkey's key while it is down (with or without its modifiers): the LL hook has no repeat flag, so key-downs before its key-up are auto-repeat
+static bool _winSpaceKeyup = false, _winSpaceConsumed = false;
+static bool _winKeyForwarded = false;
+static DWORD _pendingWinVk = 0;
+static DWORD _pendingAltVk = 0;
+static bool _altForwarded = false, _altConsumed = false;
 static Uint16 _keycode = 0;
 static DWORD _keyVk = 0, _keyExtended = 0;   // the key as Windows sent it: re-sent as is after a restore (Home, numpad 1...)
 static bool _hasJustUsedHotKey = false;
@@ -384,8 +390,16 @@ static bool windowsShortcut(DWORD vk, unsigned flag) {
 /// Volume, media, browser and launch keys, PrintScreen: they go on and the picker stays open.
 static bool deviceKey(DWORD vk) { return vk == VK_SNAPSHOT || (vk >= VK_BROWSER_BACK && vk <= VK_LAUNCH_APP2); }
 void resetTyping() { ResetEnglishWord(true); _autoFixUndo.active = false; startNewSession(); }
-void insertText(const std::wstring& text) {
+void insertText(const std::wstring& text, HWND targetFocus) {
     resetTyping();
+    if (targetFocus && IsWindow(targetFocus)) {
+        wchar_t cls[64] = {}; GetClassNameW(targetFocus, cls, 64);
+        if (_wcsicmp(cls, L"Edit") == 0 || _wcsnicmp(cls, L"RICHEDIT", 8) == 0) {
+            bool delivered = true; DWORD_PTR result = 0;
+            for (wchar_t ch : text) if (!SendMessageTimeoutW(targetFocus, WM_CHAR, (WPARAM)ch, 1, SMTO_ABORTIFHUNG, 1000, &result)) { delivered = false; break; }
+            if (delivered) return;
+        }
+    }
     batchText(text.c_str(), (int)text.size());   // KEYEVENTF_UNICODE per UTF-16 unit: surrogate pairs arrive as one character
     flushBatch();
 }
@@ -520,8 +534,24 @@ static bool modifierVk(DWORD vk, bool down) {
     unsigned bit = 0;
     switch (vk) { case VK_LSHIFT: case VK_RSHIFT: case VK_SHIFT: bit = F_SHIFT; break; case VK_LCONTROL: case VK_RCONTROL: case VK_CONTROL: bit = F_CONTROL; break;
                   case VK_LMENU: case VK_RMENU: case VK_MENU: bit = F_ALT; break; case VK_LWIN: case VK_RWIN: bit = F_WIN; break; default: return false; }
+    if (down) _trackedModifiers |= bit; else _trackedModifiers &= ~bit;
     if (down) _flag |= bit; else _flag &= ~bit;
     return true;
+}
+
+static void forwardPendingWinKey(bool release = false) {
+    if (!_pendingWinVk) return;
+    INPUT events[2]; inputKey(events[0], (WORD)_pendingWinVk, true); UINT count = 1;
+    if (release) { inputKey(events[1], (WORD)_pendingWinVk, false); count = 2; }
+    _pendingWinVk = 0; _winKeyForwarded = !release;
+    SendInput(count, events, sizeof(INPUT));  // tagged events bypass this hook and reach the shell/apps
+}
+static void forwardPendingAlt(bool release = false) {
+    if (!_pendingAltVk) return;
+    INPUT events[2]; inputKey(events[0], (WORD)_pendingAltVk, true); UINT count = 1;
+    if (release) { inputKey(events[1], (WORD)_pendingAltVk, false); count = 2; }
+    _pendingAltVk = 0; _altForwarded = !release;
+    SendInput(count, events, sizeof(INPUT));
 }
 
 static LRESULT CALLBACK keyboardHook(int nCode, WPARAM wParam, LPARAM lParam) {
@@ -532,11 +562,60 @@ static LRESULT CALLBACK keyboardHook(int nCode, WPARAM wParam, LPARAM lParam) {
     // modifiers as Windows has them, not only from the events seen here: keys let go on the lock screen (Win+L) or
     // after Ctrl+Alt+Del never reach the hook, and a Win or Alt left set stops Telex until that key is tapped again
     _flag = (GetKeyState(VK_CAPITAL) & 1 ? F_CAPS : 0) | (GetAsyncKeyState(VK_SHIFT) < 0 ? F_SHIFT : 0) | (GetAsyncKeyState(VK_CONTROL) < 0 ? F_CONTROL : 0) |
-            (GetAsyncKeyState(VK_MENU) < 0 ? F_ALT : 0) | (GetAsyncKeyState(VK_LWIN) < 0 || GetAsyncKeyState(VK_RWIN) < 0 ? F_WIN : 0);
+            (GetAsyncKeyState(VK_MENU) < 0 ? F_ALT : 0) | (GetAsyncKeyState(VK_LWIN) < 0 || GetAsyncKeyState(VK_RWIN) < 0 ? F_WIN : 0) | _trackedModifiers;
     checkPauseExpired();
 
     // modifier keys: track them, and detect a modifiers-only hotkey on release
     if (modifierVk(k->vkCode, down)) {
+        bool winKey = k->vkCode == VK_LWIN || k->vkCode == VK_RWIN;
+        bool altKey = k->vkCode == VK_LMENU || k->vkCode == VK_RMENU || k->vkCode == VK_MENU;
+        bool captureWinSpace = GET_SWITCH_KEY(vSwitchKeyStatus) == KEY_SPACE && HAS_COMMAND(vSwitchKeyStatus);
+        if (winKey && down && captureWinSpace) {
+            if (_pendingWinVk && _pendingWinVk != k->vkCode) forwardPendingWinKey();
+            _pendingWinVk = k->vkCode;
+        }
+        if (!down && _winSpaceConsumed && winKey) {
+            _winSpaceConsumed = _winSpaceKeyup = _winKeyForwarded = false; _lastFlag = 0; _modifierChordUsed = false; return 1;
+        }
+        if (winKey && !down && _pendingWinVk == k->vkCode) {
+            forwardPendingWinKey(true); _lastFlag = 0; _modifierChordUsed = false; return 1;
+        }
+        if (winKey && !down && _winKeyForwarded) {
+            _winKeyForwarded = false; INPUT up; inputKey(up, (WORD)k->vkCode, false); SendInput(1, &up, sizeof(INPUT));
+            _lastFlag = 0; _modifierChordUsed = false; return 1;
+        }
+        if (!winKey && down && _pendingWinVk) {
+            bool modInWinSwitch = captureWinSpace && (
+                ((k->vkCode == VK_LSHIFT || k->vkCode == VK_RSHIFT || k->vkCode == VK_SHIFT) && HAS_SHIFT(vSwitchKeyStatus)) ||
+                ((k->vkCode == VK_LCONTROL || k->vkCode == VK_RCONTROL || k->vkCode == VK_CONTROL) && HAS_CONTROL(vSwitchKeyStatus)) ||
+                (altKey && HAS_OPTION(vSwitchKeyStatus)));
+            if (!modInWinSwitch) forwardPendingWinKey();
+        }
+        if (!altKey && down && _pendingAltVk && (k->vkCode == VK_LCONTROL || k->vkCode == VK_RCONTROL || k->vkCode == VK_CONTROL)) {
+            int emojiHk = prefs::getInt(L"EmojiHotkey", 0);
+            bool altCtrlUsed = (prefs::getInt(L"EmojiPicker", 0) && HAS_CONTROL(emojiHk) && HAS_OPTION(emojiHk)) ||
+                               (HAS_CONTROL(vSwitchKeyStatus) && HAS_OPTION(vSwitchKeyStatus));
+            if (!altCtrlUsed) forwardPendingAlt();
+        }
+        if (altKey && down && !(_flag & F_CONTROL)) {
+            bool usedByEmoji = prefs::getInt(L"EmojiPicker", 0) && HAS_OPTION(prefs::getInt(L"EmojiHotkey", 0));
+            bool usedBySwitch = HAS_OPTION(vSwitchKeyStatus);
+            if (usedByEmoji || usedBySwitch) {
+                if (!_modifierChordUsed && (_lastFlag == 0 || _lastFlag < _flag)) _lastFlag = _flag;
+                _pendingAltVk = k->vkCode;
+                return 1;
+            }
+        }
+        if (altKey && !down) {
+            if (!_modifierChordUsed && _lastFlag > _flag && GET_SWITCH_KEY(vSwitchKeyStatus) == 0xFE && checkHotKey(vSwitchKeyStatus, _lastFlag, false)) {
+                _lastFlag = 0; _hasJustUsedHotKey = true;
+                if (_pendingAltVk == k->vkCode) { _pendingAltVk = 0; _altConsumed = true; }
+                switchLanguage("hotkey");
+            }
+            if (_altConsumed) { _altConsumed = false; _pendingAltVk = 0; _lastFlag = 0; return 1; }
+            if (_pendingAltVk == k->vkCode) { forwardPendingAlt(true); _lastFlag = 0; return 1; }
+            if (_altForwarded) { _altForwarded = false; INPUT up; inputKey(up, (WORD)k->vkCode, false); SendInput(1, &up, sizeof(INPUT)); _lastFlag = 0; return 1; }
+        }
         if (_modifierChordUsed) {   // Ctrl+Alt+Shift-click, then letting go of Alt and Shift one by one, must not switch
             _lastFlag = 0;
             if (!(_flag & (F_SHIFT | F_CONTROL | F_ALT | F_WIN))) _modifierChordUsed = false;
@@ -548,16 +627,29 @@ static LRESULT CALLBACK keyboardHook(int nCode, WPARAM wParam, LPARAM lParam) {
             _lastFlag = 0; _hasJustUsedHotKey = hit;
             if (hit) switchLanguage("hotkey");
         }
-        return CallNextHookEx(_kbHook, nCode, wParam, lParam);
+        return winKey && down && captureWinSpace ? 1 : CallNextHookEx(_kbHook, nCode, wParam, lParam);
     }
-    if (!down) { if (k->vkCode == _hotkeyVk) _hotkeyVk = 0; return CallNextHookEx(_kbHook, nCode, wParam, lParam); }
+    if (down && k->vkCode != VK_SPACE && _pendingWinVk) forwardPendingWinKey();
+    if (!down) {
+        if (k->vkCode == VK_SPACE && _winSpaceKeyup) { _winSpaceKeyup = false; _hotkeyVk = 0; return 1; }
+        if (k->vkCode == _hotkeyVk) _hotkeyVk = 0; return CallNextHookEx(_kbHook, nCode, wParam, lParam);
+    }
 
     _keycode = engineKey(k->vkCode);
     _keyVk = k->vkCode; _keyExtended = (k->flags & LLKHF_EXTENDED) ? KEYEVENTF_EXTENDEDKEY : 0;
+    // Windows owns Win+Space, so when Win+Space is configured as the switch hotkey, swallow its full transition.
+    if (k->vkCode == VK_SPACE && _winSpaceKeyup) return 1;
+    if (k->vkCode == VK_SPACE && GET_SWITCH_KEY(vSwitchKeyStatus) == KEY_SPACE && HAS_COMMAND(vSwitchKeyStatus) && checkHotKey(vSwitchKeyStatus, _flag)) {
+        _pendingWinVk = 0; _winSpaceKeyup = true; _winSpaceConsumed = true;
+        if (_pendingAltVk && HAS_OPTION(vSwitchKeyStatus)) { _pendingAltVk = 0; _altConsumed = true; }
+        switchLanguage("hotkey"); _lastFlag = 0; _hasJustUsedHotKey = true; return 1;
+    }
+    if (k->vkCode == VK_SPACE && _pendingWinVk) forwardPendingWinKey();
     // emoji picker hotkey (opens and closes it): a key with exactly these modifiers
     if (vEmojiHotkey && GET_SWITCH_KEY(vEmojiHotkey) == _keycode &&
         HAS_CONTROL(vEmojiHotkey) == GET_BOOL(_flag & F_CONTROL) && HAS_OPTION(vEmojiHotkey) == GET_BOOL(_flag & F_ALT) &&
         HAS_COMMAND(vEmojiHotkey) == GET_BOOL(_flag & F_WIN) && HAS_SHIFT(vEmojiHotkey) == GET_BOOL(_flag & F_SHIFT)) {
+        if (_pendingAltVk && HAS_OPTION(vEmojiHotkey)) { _pendingAltVk = 0; _altConsumed = true; }
         cancelModifierHotkey();   // Ctrl+Shift+E: releasing Ctrl+Shift afterwards isn't the Ctrl+Shift hotkey
         if (_emojiHandler) _emojiHandler();
         return 1;
@@ -566,10 +658,11 @@ static LRESULT CALLBACK keyboardHook(int nCode, WPARAM wParam, LPARAM lParam) {
     // its cursor. Characters sent by other tools (VK_PACKET) go to it as characters.
     if (vEmojiOpen && vEmojiWindow) {
         if (k->vkCode == VK_PACKET) { PostMessageW(vEmojiWindow, WM_APP + 12, k->scanCode, 0); return 1; }
-        if (windowsShortcut(k->vkCode, _flag)) { vEmojiOpen = false; PostMessageW(vEmojiWindow, WM_APP + 11, 0, 0); }   // closes it (closed now: the next key goes to the app) and goes on as usual
+        if (windowsShortcut(k->vkCode, _flag)) { if (_pendingAltVk) forwardPendingAlt(); vEmojiOpen = false; PostMessageW(vEmojiWindow, WM_APP + 11, 0, 0); }   // closes it (closed now: the next key goes to the app) and goes on as usual
         else if (!deviceKey(k->vkCode)) { PostMessageW(vEmojiWindow, WM_APP + 10, k->vkCode, (LPARAM)_flag); return 1; }
     }
     if (_keycode == KEY_EMPTY) {   // F-keys, media keys...: not ours. A key typing a character still ends the word.
+        if (_pendingAltVk) forwardPendingAlt();
         cancelModifierHotkey();   // Ctrl+Shift+F5, Ctrl+Shift+numpad +: releasing Ctrl+Shift afterwards isn't the hotkey
         if (unmodeledKeyEndsWord(k->vkCode)) { TLEndWord("other"); resetTyping(); }
         return CallNextHookEx(_kbHook, nCode, wParam, lParam);
@@ -578,17 +671,19 @@ static LRESULT CALLBACK keyboardHook(int nCode, WPARAM wParam, LPARAM lParam) {
     // a password field gets the keys exactly as typed, in both languages: no switch hotkey (Shift+Z types Z, as under the
     // Mac's secure input and Linux's password purpose), no Telex, no auto switch, no Backspace undo (also right after a
     // focus change, until the field has been checked)
-    if (site::focusedIsPassword()) { cancelModifierHotkey(); _hotkeyVk = 0; resetTyping(); return CallNextHookEx(_kbHook, nCode, wParam, lParam); }
+    if (site::focusedIsPassword()) { if (_pendingAltVk) forwardPendingAlt(); cancelModifierHotkey(); _hotkeyVk = 0; resetTyping(); return CallNextHookEx(_kbHook, nCode, wParam, lParam); }
 
     // switch language hotkey
     if (GET_SWITCH_KEY(vSwitchKeyStatus) != _keycode) { cancelModifierHotkey(); _hotkeyVk = 0; }
     else {
         bool repeat = k->vkCode == _hotkeyVk; _hotkeyVk = k->vkCode;   // any press, matched or not: Alt+Shift+Z, then Shift up, mustn't switch on a repeat (the Mac's autorepeat flag)
         if (checkHotKey(vSwitchKeyStatus, _flag, GET_SWITCH_KEY(vSwitchKeyStatus) != 0xFE)) {
+            if (_pendingAltVk && HAS_OPTION(vSwitchKeyStatus)) { _pendingAltVk = 0; _altConsumed = true; }
             if (repeat) return 1;   // holding Alt+Z: switch once per press, swallow the auto-repeat
             switchLanguage("hotkey"); _lastFlag = 0; _hasJustUsedHotKey = true; return 1;
         }
     }
+    if (_pendingAltVk) forwardPendingAlt();
     _hasJustUsedHotKey = _lastFlag != 0;
 
     // Backspace right after an automatic correction (D61): the first takes only the break key and keeps the
@@ -624,9 +719,16 @@ static LRESULT CALLBACK keyboardHook(int nCode, WPARAM wParam, LPARAM lParam) {
 static LRESULT CALLBACK mouseHook(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode == HC_ACTION && (wParam == WM_LBUTTONDOWN || wParam == WM_RBUTTONDOWN || wParam == WM_MBUTTONDOWN)) {
         if (vEmojiOpen && vEmojiWindow) {   // a click outside the picker closes it (the picker never takes the focus)
-            RECT r; GetWindowRect(vEmojiWindow, &r); POINT p = ((MSLLHOOKSTRUCT*)lParam)->pt;
-            if (!PtInRect(&r, p)) PostMessageW(vEmojiWindow, WM_APP + 11, 0, 0);
+            // MSLLHOOKSTRUCT::pt is physical, but the legacy settings/hook thread is
+            // DPI-unaware. Read the picker bounds in its own DPI context before comparing.
+            DPI_AWARENESS_CONTEXT previous = SetThreadDpiAwarenessContext(GetWindowDpiAwarenessContext(vEmojiWindow));
+            RECT r = {}; BOOL haveBounds = GetWindowRect(vEmojiWindow, &r);
+            if (previous) SetThreadDpiAwarenessContext(previous);
+            POINT p = ((MSLLHOOKSTRUCT*)lParam)->pt;
+            if (haveBounds && PtInRect(&r, p)) return CallNextHookEx(_mouseHook, nCode, wParam, lParam);
+            if (haveBounds) PostMessageW(vEmojiWindow, WM_APP + 11, 0, 0);
         }
+        if (_pendingAltVk) forwardPendingAlt();
         cancelModifierHotkey();   // Ctrl+Shift-click: the modifiers were for the click, so releasing them isn't the Ctrl+Shift hotkey
         _hotkeyVk = 0;   // a missed key-up (focus change, lock screen) must not swallow the next Alt+Z
         _autoFixUndo.active = false; TLNoteClick();
@@ -636,7 +738,14 @@ static LRESULT CALLBACK mouseHook(int nCode, WPARAM wParam, LPARAM lParam) {
     return CallNextHookEx(_mouseHook, nCode, wParam, lParam);
 }
 
-static VOID CALLBACK foregroundHook(HWINEVENTHOOK, DWORD, HWND, LONG, LONG, DWORD, DWORD) { _hotkeyVk = 0; updateOtherInputLanguage(); onForegroundChanged(); }
+static VOID CALLBACK foregroundHook(HWINEVENTHOOK, DWORD, HWND, LONG, LONG, DWORD, DWORD) {
+    _hotkeyVk = 0;
+    // The shell may report its Win+Space language flyout as foreground between Space-down
+    // and Win-up. Keep the suppression latch through that transient focus change.
+    if (!_winSpaceConsumed) _winSpaceKeyup = false;
+    _trackedModifiers = 0; _pendingAltVk = 0; _altForwarded = false; _altConsumed = false;
+    if (!_winSpaceConsumed) { _pendingWinVk = 0; _winKeyForwarded = false; } updateOtherInputLanguage(); onForegroundChanged();
+}
 
 bool start() {
     if (_kbHook) return true;

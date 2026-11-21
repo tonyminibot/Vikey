@@ -2,6 +2,7 @@
 #define _HAS_STD_BYTE 0
 // Drawn with Direct2D + DirectWrite because GDI/GDI+ cannot draw colour emoji (Segoe UI Emoji's colour glyphs).
 #include "Emoji.h"
+#include "Settings.h"
 #include "Core.h"
 #include "Prefs.h"
 #include "KeyMap.h"
@@ -264,20 +265,33 @@ static std::vector<std::wstring> usageFrequent(int n) {
 }
 
 // ---- model (EmojiPickerModel) --------------------------------------------------------------------
-static const int COLS = 9; static const float CELL = 44, WIDTH = COLS * CELL + 24, HEIGHT = 404;
-static const float SEARCH_H = 14 + 24 + 8, FOOTER_H = 44, GRID_PAD = 8, GRID_X = 12;
+static const int COLS = 5; static const float CELL = 40, WIDTH = COLS * CELL + 24, HEIGHT = 284;
+static const float SEARCH_H = 14 + 24 + 8, CATEGORY_H = 34, FOOTER_H = 42, GRID_PAD = 6, GRID_X = 12;
 static const wchar_t* GROUP_VI[] = {L"Mặt cười & cảm xúc", L"Người & cơ thể", L"", L"Động vật & thiên nhiên", L"Đồ ăn & thức uống", L"Du lịch & địa điểm", L"Hoạt động", L"Đồ vật", L"Biểu tượng", L"Cờ"};
 static const wchar_t* GROUP_EN[] = {L"Smileys & Emotion", L"People & Body", L"", L"Animals & Nature", L"Food & Drink", L"Travel & Places", L"Activities", L"Objects", L"Symbols", L"Flags"};
+static const int CATEGORY_IDS[] = {-3, -2, 0, 1, 3, 4, 5, 6, 7, 8, 9};  // all, recent, then nine Emoji groups
 
 struct Row { bool header; std::wstring title; int start, count; float y, h; };
 static std::wstring _raw; static bool _allSelected = false; static bool _vietnamese = true;
 static std::vector<int> _results, _visible, _recents;   // indices into _all
 static std::vector<Row> _rows; static float _contentH = 0, _scrollY = 0;
-static int _selected = 0; static int _tone = 0; static POINT _lastMouse = {-1, -1};
+static int _selected = 0; static int _tone = 0, _category = -3; static POINT _lastMouse = {-1, -1}; // -3 = all, -2 = recent
 static bool _searching() { return !trim(_raw).empty(); }
 static std::wstring _display() { return _vietnamese ? telexConvert(_raw) : _raw; }
+static std::wstring categoryLabel(int id) {
+    if (id == -3) return _vietnamese ? L"Tất cả nhóm" : L"All categories";
+    if (id == -2) return _vietnamese ? L"Dùng gần đây" : L"Recently used";
+    if (id >= 0 && id < 10) return _vietnamese ? GROUP_VI[id] : GROUP_EN[id];
+    return _vietnamese ? L"Tất cả nhóm" : L"All categories";
+}
 static const Emoji* _current() { return _selected >= 0 && _selected < (int)_visible.size() ? &_all[_visible[_selected]] : nullptr; }
 
+static bool inCategory(int index, int category) {
+    if (category == -3) return true;
+    if (category == -2) return std::find(_recents.begin(), _recents.end(), index) != _recents.end();
+    for (auto& g : _groups) if (g.first == category) return std::find(g.second.begin(), g.second.end(), index) != g.second.end();
+    return false;
+}
 static void relayout() {
     _visible.clear(); _rows.clear(); float y = 0;
     auto add = [&](const std::wstring& title, const std::vector<int>& list) {
@@ -286,15 +300,15 @@ static void relayout() {
         int start = (int)_visible.size(); _visible.insert(_visible.end(), list.begin(), list.end());
         for (int i = 0; i < (int)list.size(); i += COLS) { _rows.push_back({false, L"", start + i, std::min(COLS, (int)list.size() - i), y, CELL}); y += CELL; }
     };
-    if (_searching()) add(L"", _results);
+    if (_searching()) { std::vector<int> filtered; for (int i : _results) if (inCategory(i, _category)) filtered.push_back(i); add(L"", filtered); }
     else {
-        add(_vietnamese ? L"Dùng thường xuyên" : L"Frequently Used", _recents);
-        for (auto& g : _groups) if (g.first >= 0 && g.first < 10) add(_vietnamese ? GROUP_VI[g.first] : GROUP_EN[g.first], g.second);
+        if (_category == -3 || _category == -2) add(_vietnamese ? L"Dùng thường xuyên" : L"Frequently Used", _recents);
+        for (auto& g : _groups) if (g.first >= 0 && g.first < 10 && (_category == -3 || _category == g.first)) add(_vietnamese ? GROUP_VI[g.first] : GROUP_EN[g.first], g.second);
     }
     _contentH = y;
 }
 static int rowOf(int i) { for (int r = 0; r < (int)_rows.size(); r++) if (!_rows[r].header && i >= _rows[r].start && i < _rows[r].start + _rows[r].count) return r; return -1; }
-static float viewportH() { return HEIGHT - SEARCH_H - 1 - FOOTER_H - 1 - 2 * GRID_PAD; }
+static float viewportH() { return HEIGHT - SEARCH_H - CATEGORY_H - 1 - FOOTER_H - 1 - 2 * GRID_PAD; }
 static void clampScroll() { _scrollY = std::max(0.0f, std::min(_scrollY, std::max(0.0f, _contentH - viewportH()))); }
 static void scrollToSelected() {   // the least scrolling that shows the row; back on top shows the first title too
     int r = rowOf(_selected); if (r < 0) return;
@@ -317,7 +331,7 @@ static void moveRow(int d) {   // the row above/below, same column (or its last 
     _selected = _rows[t].start + std::min(_selected - _rows[r].start, _rows[t].count - 1); scrollToSelected();
 }
 static void resetModel(bool vietnamese) {
-    _vietnamese = vietnamese; _raw.clear(); _allSelected = false; _results.clear(); _selected = 0; _scrollY = 0;
+    _vietnamese = vietnamese; _raw.clear(); _allSelected = false; _results.clear(); _selected = 0; _scrollY = 0; _category = -3;
     GetCursorPos(&_lastMouse);
     _tone = prefs::getInt(L"EmojiSkinTone", 0);
     std::map<std::wstring, int> byChar; for (int i = 0; i < (int)_all.size(); i++) byChar.emplace(_all[i].ch, i);
@@ -327,8 +341,9 @@ static void resetModel(bool vietnamese) {
 
 // ---- the popup --------------------------------------------------------------------------------------
 static HINSTANCE _inst; static HWND _win; static bool _open = false; static bool _caret = true;
+static HWND _targetWindow, _targetFocus;
 static ID2D1Factory* _d2d; static IDWriteFactory* _dw; static ID2D1HwndRenderTarget* _rt;
-static IDWriteTextFormat *_fSearch, *_fHeader, *_fFooter, *_fEmoji, *_fEmojiFooter, *_fTone, *_fWordmark, *_fBadge, *_fEmpty;
+static IDWriteTextFormat *_fSearch, *_fHeader, *_fFooter, *_fEmoji, *_fEmojiFooter, *_fTone, *_fWordmark, *_fBadge, *_fEmpty, *_fCategory;
 static ID2D1SolidColorBrush *_bText, *_bSecondary, *_bTertiary, *_bBrand, *_bBrandSoft, *_bSep, *_bBadge, *_bSelect;
 static float _dpi = 96;
 static const D2D1_COLOR_F BRAND = D2D1::ColorF(0x4F46E5);
@@ -347,16 +362,20 @@ static void ensureGraphics() {
         if (_fFooter) { IDWriteInlineObject* sign = nullptr; _dw->CreateEllipsisTrimmingSign(_fFooter, &sign); DWRITE_TRIMMING tr = {DWRITE_TRIMMING_GRANULARITY_CHARACTER, 0, 0}; _fFooter->SetTrimming(&tr, sign); if (sign) sign->Release(); }
         _fEmoji = fmt(L"Segoe UI Emoji", 28, DWRITE_FONT_WEIGHT_NORMAL, true); _fEmojiFooter = fmt(L"Segoe UI Emoji", 22); _fTone = fmt(L"Segoe UI Emoji", 18, DWRITE_FONT_WEIGHT_NORMAL, true);
         _fWordmark = fmt(L"Segoe UI", 13, DWRITE_FONT_WEIGHT_BOLD); _fBadge = fmt(L"Segoe UI", 11, DWRITE_FONT_WEIGHT_SEMI_BOLD, true); _fEmpty = fmt(L"Segoe UI", 15, DWRITE_FONT_WEIGHT_NORMAL, true);
+        _fCategory = fmt(L"Segoe UI", 12, DWRITE_FONT_WEIGHT_SEMI_BOLD);
     }
     if (!_rt && _d2d && _win) {
+        DPI_AWARENESS_CONTEXT oldContext = SetThreadDpiAwarenessContext(GetWindowDpiAwarenessContext(_win));
         RECT rc; GetClientRect(_win, &rc);
         _d2d->CreateHwndRenderTarget(D2D1::RenderTargetProperties(), D2D1::HwndRenderTargetProperties(_win, D2D1::SizeU(rc.right, rc.bottom)), &_rt);
+        if (oldContext) SetThreadDpiAwarenessContext(oldContext);
         if (_rt) {
             _rt->SetDpi(_dpi, _dpi);
-            _rt->CreateSolidColorBrush(D2D1::ColorF(0x000000), &_bText); _rt->CreateSolidColorBrush(D2D1::ColorF(0x6E6E73), &_bSecondary);
-            _rt->CreateSolidColorBrush(D2D1::ColorF(0xA0A0A5), &_bTertiary); _rt->CreateSolidColorBrush(BRAND, &_bBrand);
-            _rt->CreateSolidColorBrush(D2D1::ColorF(0x4F46E5, 0.3f), &_bBrandSoft); _rt->CreateSolidColorBrush(D2D1::ColorF(0x000000, 0.1f), &_bSep);
-            _rt->CreateSolidColorBrush(D2D1::ColorF(0x000000, 0.07f), &_bBadge); _rt->CreateSolidColorBrush(D2D1::ColorF(0x4F46E5, 0.22f), &_bSelect);
+            bool dark = ui::isDarkMode();
+            _rt->CreateSolidColorBrush(D2D1::ColorF(dark ? 0xEFEFF5 : 0x000000), &_bText); _rt->CreateSolidColorBrush(D2D1::ColorF(dark ? 0xAEAEBA : 0x6E6E73), &_bSecondary);
+            _rt->CreateSolidColorBrush(D2D1::ColorF(dark ? 0x7B7B8A : 0xA0A0A5), &_bTertiary); _rt->CreateSolidColorBrush(BRAND, &_bBrand);
+            _rt->CreateSolidColorBrush(D2D1::ColorF(0x4F46E5, 0.3f), &_bBrandSoft); _rt->CreateSolidColorBrush(D2D1::ColorF(dark ? 0xFFFFFF : 0x000000, 0.1f), &_bSep);
+            _rt->CreateSolidColorBrush(D2D1::ColorF(dark ? 0x33333B : 0x000000, dark ? 0.92f : 0.07f), &_bBadge); _rt->CreateSolidColorBrush(D2D1::ColorF(0x4F46E5, dark ? 0.36f : 0.22f), &_bSelect);
         }
     }
 }
@@ -369,14 +388,14 @@ static float textWidth(const std::wstring& s, IDWriteTextFormat* f) {
     DWRITE_TEXT_METRICS m; l->GetMetrics(&m); l->Release(); return m.widthIncludingTrailingWhitespace;
 }
 static void text(const std::wstring& s, IDWriteTextFormat* f, D2D1_RECT_F r, ID2D1Brush* b) { if (!s.empty()) _rt->DrawTextW(s.c_str(), (UINT32)s.size(), f, r, b, (D2D1_DRAW_TEXT_OPTIONS)(D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT | D2D1_DRAW_TEXT_OPTIONS_CLIP)); }
-static float gridTop() { return SEARCH_H + 1 + GRID_PAD; }
+static float gridTop() { return SEARCH_H + CATEGORY_H + 1 + GRID_PAD; }
 static D2D1_RECT_F cellRect(const Row& r, int c) { float x = GRID_X + c * CELL, y = gridTop() + r.y - _scrollY; return D2D1::RectF(x, y, x + CELL, y + CELL); }
 static D2D1_RECT_F toneRect() { return D2D1::RectF(WIDTH - 14 - 28, HEIGHT - FOOTER_H + 8, WIDTH - 14, HEIGHT - 8); }
 
 static void paint() {
     ensureGraphics(); if (!_rt) return;
     _rt->BeginDraw();
-    _rt->Clear(D2D1::ColorF(0xF7F7F8));
+    _rt->Clear(ui::isDarkMode() ? D2D1::ColorF(0x18181C) : D2D1::ColorF(0xF7F7F8));
     // search field: magnifier, the query (Telex-read in Vietnamese mode), caret, placeholder, VI/EN badge
     float sx = 14, sy = 14, sh = 24;
     _rt->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(sx + 7, sy + 10), 5.5f, 5.5f), _bSecondary, 1.6f);
@@ -390,10 +409,16 @@ static void paint() {
     _rt->FillRoundedRectangle(D2D1::RoundedRect(badge, 5, 5), _bBadge);
     text(_vietnamese ? L"VI" : L"EN", _fBadge, badge, _bSecondary);
     _rt->FillRectangle(D2D1::RectF(0, SEARCH_H, WIDTH, SEARCH_H + 1), _bSep);
+    D2D1_RECT_F cat = D2D1::RectF(14, SEARCH_H + 4, WIDTH - 14, SEARCH_H + CATEGORY_H - 4);
+    _rt->FillRoundedRectangle(D2D1::RoundedRect(cat, 7, 7), _bBadge);
+    text(categoryLabel(_category), _fCategory, D2D1::RectF(cat.left + 9, cat.top, cat.right - 24, cat.bottom), _bSecondary);
+    _rt->DrawLine(D2D1::Point2F(cat.right - 15, cat.top + 9), D2D1::Point2F(cat.right - 11, cat.top + 13), _bSecondary, 1.5f);
+    _rt->DrawLine(D2D1::Point2F(cat.right - 11, cat.top + 13), D2D1::Point2F(cat.right - 7, cat.top + 9), _bSecondary, 1.5f);
+    _rt->FillRectangle(D2D1::RectF(0, SEARCH_H + CATEGORY_H, WIDTH, SEARCH_H + CATEGORY_H + 1), _bSep);
     // grid
-    float gt = SEARCH_H + 1, gb = HEIGHT - FOOTER_H - 1;
+    float gt = SEARCH_H + CATEGORY_H + 1, gb = HEIGHT - FOOTER_H - 1;
     _rt->PushAxisAlignedClip(D2D1::RectF(0, gt + GRID_PAD, WIDTH, gb - GRID_PAD), D2D1_ANTIALIAS_MODE_ALIASED);   // the scrolling area itself is inset (Tony)
-    if (_searching() && _results.empty()) text(_vietnamese ? L"Không tìm thấy emoji nào" : L"No emoji found", _fEmpty, D2D1::RectF(0, gt + 100, WIDTH, gt + 140), _bSecondary);
+    if (_searching() && _visible.empty()) text(_vietnamese ? L"Không tìm thấy emoji nào" : L"No emoji found", _fEmpty, D2D1::RectF(0, gt + 100, WIDTH, gt + 140), _bSecondary);
     for (auto& r : _rows) {
         float y = gridTop() + r.y - _scrollY; if (y + r.h < gt || y > gb) continue;
         if (r.header) { float pad = r.h - 20; text(r.title, _fHeader, D2D1::RectF(GRID_X, y + pad, WIDTH - GRID_X, y + pad + 14), _bSecondary); continue; }
@@ -438,11 +463,26 @@ static void choose(const Emoji* e) {
     if (!e) return;
     std::wstring t = e->withSkin(_tone); usageRecord(e->ch);
     close();
-    core::insertText(t);
+    if (!_targetWindow || !IsWindow(_targetWindow)) { core::insertText(t); return; }
+
+    // The browser usually represents a DOM editor through its top-level HWND. Keep that
+    // foreground input queue attached while sending Unicode so the browser's renderer gets it.
+    DWORD thisThread = GetCurrentThreadId(), targetThread = GetWindowThreadProcessId(_targetWindow, nullptr);
+    BOOL attached = targetThread && targetThread != thisThread && AttachThreadInput(thisThread, targetThread, TRUE);
+    HWND focus = _targetFocus;
+    if (!focus || !IsWindow(focus) || GetAncestor(focus, GA_ROOT) != _targetWindow) {
+        GUITHREADINFO info = {sizeof(info)};
+        if (GetGUIThreadInfo(targetThread, &info) && info.hwndFocus && GetAncestor(info.hwndFocus, GA_ROOT) == _targetWindow) focus = info.hwndFocus;
+        else focus = _targetWindow;
+    }
+    if (GetForegroundWindow() != _targetWindow) SetForegroundWindow(_targetWindow);
+    if (focus != GetFocus()) SetFocus(focus);
+    core::insertText(t, focus);
+    if (attached) AttachThreadInput(thisThread, targetThread, FALSE);
 }
 static int cellAt(int px, int py) {   // index of the emoji under the point (client pixels), -1 if none
     float x = px * 96.0f / _dpi, y = py * 96.0f / _dpi;
-    if (y < SEARCH_H + 1 || y > HEIGHT - FOOTER_H - 1) return -1;
+    if (y < SEARCH_H + CATEGORY_H + 1 || y > HEIGHT - FOOTER_H - 1) return -1;
     for (auto& r : _rows) { if (r.header) continue; float ry = gridTop() + r.y - _scrollY; if (y >= ry && y < ry + r.h) { int c = (int)((x - GRID_X) / CELL); return x >= GRID_X && c < r.count ? r.start + c : -1; } }
     return -1;
 }
@@ -491,6 +531,16 @@ static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
         return 0; }
     case WM_LBUTTONDOWN: {
         float x = GET_X_LPARAM(l) * 96.0f / _dpi, y = GET_Y_LPARAM(l) * 96.0f / _dpi; D2D1_RECT_F tr = toneRect();
+        if (y >= SEARCH_H && y < SEARCH_H + CATEGORY_H) {
+            HMENU menu = CreatePopupMenu();
+            for (int i = 0; i < (int)(sizeof(CATEGORY_IDS) / sizeof(CATEGORY_IDS[0])); i++) AppendMenuW(menu, MF_STRING | (_category == CATEGORY_IDS[i] ? MF_CHECKED : 0), i + 1, categoryLabel(CATEGORY_IDS[i]).c_str());
+            DPI_AWARENESS_CONTEXT oldContext = SetThreadDpiAwarenessContext(GetWindowDpiAwarenessContext(h));
+            POINT screen = {GET_X_LPARAM(l), GET_Y_LPARAM(l)}; ClientToScreen(h, &screen);
+            UINT choice = TrackPopupMenu(menu, TPM_LEFTALIGN | TPM_TOPALIGN | TPM_RETURNCMD, screen.x, screen.y, 0, h, nullptr); DestroyMenu(menu);
+            if (oldContext) SetThreadDpiAwarenessContext(oldContext);
+            if (choice > 0 && choice <= sizeof(CATEGORY_IDS) / sizeof(CATEGORY_IDS[0])) { _category = CATEGORY_IDS[choice - 1]; doSearch(); InvalidateRect(h, nullptr, FALSE); }
+            return 0;
+        }
         if (x >= tr.left - 4 && x <= tr.right + 4 && y >= tr.top - 4) { _tone = (_tone + 1) % 6; prefs::setInt(L"EmojiSkinTone", _tone); InvalidateRect(h, nullptr, FALSE); return 0; }
         int i = cellAt(GET_X_LPARAM(l), GET_Y_LPARAM(l)); if (i >= 0) { _selected = i; choose(_current()); }
         return 0; }
@@ -505,7 +555,9 @@ static void prepare() {
     if (_win) return;
     static bool reg = false;
     if (!reg) { WNDCLASSW wc = {}; wc.lpfnWndProc = proc; wc.hInstance = _inst; wc.lpszClassName = L"VikeyEmoji"; wc.style = CS_DROPSHADOW; wc.hCursor = LoadCursor(nullptr, IDC_ARROW); RegisterClassW(&wc); reg = true; }
+    DPI_AWARENESS_CONTEXT oldDpi = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     _win = CreateWindowExW(WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW, L"VikeyEmoji", L"Vikey Emoji", WS_POPUP, 0, 0, (int)WIDTH, (int)HEIGHT, nullptr, nullptr, _inst, nullptr);
+    if (oldDpi) SetThreadDpiAwarenessContext(oldDpi);
     DWORD pref = 2 /* DWMWCP_ROUND */; DwmSetWindowAttribute(_win, 33 /* DWMWA_WINDOW_ROUNDED_PREFERENCE */, &pref, sizeof(pref));
     COLORREF border = RGB(214, 214, 218); DwmSetWindowAttribute(_win, 34 /* DWMWA_BORDER_COLOR */, &border, sizeof(border));
 }
@@ -520,13 +572,17 @@ bool isOpen() { return _open; }
 void toggle() { _open ? close() : open(); }
 void open() {
     loadIndex(); prepare(); if (!_win) return;
+    _targetWindow = GetForegroundWindow(); _targetFocus = nullptr;
+    if (_targetWindow) { DWORD tid = GetWindowThreadProcessId(_targetWindow, nullptr); GUITHREADINFO info = {sizeof(info)}; if (GetGUIThreadInfo(tid, &info)) _targetFocus = info.hwndFocus ? info.hwndFocus : _targetWindow; }
     resetModel(core::language() == 1);
+    DPI_AWARENESS_CONTEXT oldContext = SetThreadDpiAwarenessContext(GetWindowDpiAwarenessContext(_win));
     POINT p; GetCursorPos(&p); HMONITOR mon = MonitorFromPoint(p, MONITOR_DEFAULTTONEAREST); MONITORINFO mi = {sizeof(mi)}; GetMonitorInfoW(mon, &mi);
     UINT dpi = GetDpiForWindow(_win); _dpi = (float)dpi; float s = dpi / 96.0f;
     int w = (int)(WIDTH * s), hgt = (int)(HEIGHT * s); RECT a = mi.rcWork;
     int x = (a.left + a.right) / 2 - w / 2, y = (a.top + a.bottom) / 2 - hgt / 2 - (int)((a.bottom - a.top) * 0.08);
     dropGraphics();
     SetWindowPos(_win, HWND_TOPMOST, x, y, w, hgt, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    if (oldContext) SetThreadDpiAwarenessContext(oldContext);
     core::setEmojiPickerOpen(true, _win); _open = true; _caret = true;
     SetTimer(_win, TIMER_CARET, 530, nullptr);
     InvalidateRect(_win, nullptr, FALSE);
@@ -536,6 +592,7 @@ void close() {
     _open = false; core::setEmojiPickerOpen(false, nullptr);
     if (_win) { KillTimer(_win, TIMER_CARET); ShowWindow(_win, SW_HIDE); }
 }
+void themeChanged() { if (_open && _win) { dropGraphics(); InvalidateRect(_win, nullptr, FALSE); } }
 void languageChanged(int lang) { if (_vietnamese != (lang == 1)) { _vietnamese = lang == 1; if (_open) { doSearch(); InvalidateRect(_win, nullptr, FALSE); } } }
 
 }} // namespace

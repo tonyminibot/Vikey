@@ -17,6 +17,7 @@ void close();
 bool isOpen();
 void languageChanged(int lang);
 void settingsChanged();         // EmojiPicker / EmojiHotkey changed in the main window or the onboarding
+void themeChanged();
 
 /// A small Telex reader for search text ("nguwaj" -> "ngựa"); exposed for tests.
 std::wstring telexConvert(const std::wstring& s);

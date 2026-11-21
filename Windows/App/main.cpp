@@ -21,6 +21,7 @@
 static const UINT WM_TRAY = WM_APP + 1;
 static const UINT WM_VIKEY_SETLANG = WM_APP + 2;   // tests: wParam = language (0 English, 1 Vietnamese)
 static const UINT WM_VIKEY_EMOJI = WM_APP + 5;     // the emoji hotkey, posted from the keyboard hook
+static const UINT WM_VIKEY_TEST_RELOAD = WM_APP + 8; // live-test-only preference reload
 static const UINT WM_TASKBARCREATED = RegisterWindowMessageW(L"TaskbarCreated");   // Explorer (re)started: the tray is empty
 static const UINT TIMER_FLUSH = 1;
 enum { ID_VIET = 100, ID_ENG, ID_SETTINGS, ID_AUTOSWITCH, ID_UPDATE, ID_LOGTOGGLE, ID_LOG, ID_ABOUT, ID_QUIT, ID_FEEDBACK, ID_GUIDE };
@@ -29,31 +30,30 @@ static HWND _hwnd; static NOTIFYICONDATAW _nid = {};
 static HICON _iconV, _iconE;
 
 /// Draws the menu-bar glyph: a rounded square with a V or E cut out, like the macOS icon.
-static HICON makeIcon(wchar_t letter, bool dark) {
-    const int S = 32;
+static HICON makeIcon(wchar_t letter) {
+    const int S = 64;
     HDC dc = CreateCompatibleDC(nullptr);
     BITMAPINFO bi = {}; bi.bmiHeader.biSize = sizeof(bi.bmiHeader); bi.bmiHeader.biWidth = S; bi.bmiHeader.biHeight = -S; bi.bmiHeader.biPlanes = 1; bi.bmiHeader.biBitCount = 32;
     void* bits = nullptr; HBITMAP color = CreateDIBSection(dc, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
     HGDIOBJ old = SelectObject(dc, color);
     DWORD* px = (DWORD*)bits; for (int i = 0; i < S * S; i++) px[i] = 0;
-    COLORREF fg = dark ? RGB(255, 255, 255) : RGB(0, 0, 0);
+    COLORREF fg = letter == L'V' ? RGB(79, 70, 229) : RGB(75, 91, 112);
     HBRUSH b = CreateSolidBrush(fg); HPEN p = CreatePen(PS_NULL, 0, 0);
     SelectObject(dc, b); SelectObject(dc, p);
-    RoundRect(dc, 2, 3, S - 2, S - 3, 10, 10);
-    HFONT f = CreateFontW(-22, 0, 0, 0, FW_BOLD, 0, 0, 0, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
-    SelectObject(dc, f); SetBkMode(dc, TRANSPARENT); SetTextColor(dc, RGB(1, 2, 3));
+    RoundRect(dc, 2, 3, S - 2, S - 3, 22, 22);
+    HFONT f = CreateFontW(-44, 0, 0, 0, FW_BOLD, 0, 0, 0, DEFAULT_CHARSET, 0, 0, ANTIALIASED_QUALITY, 0, L"Segoe UI");
+    SelectObject(dc, f); SetBkMode(dc, TRANSPARENT); SetTextColor(dc, RGB(255, 255, 255));
     RECT r = {0, 1, S, S}; DrawTextW(dc, &letter, 1, &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-    // punch the letter out: pixels drawn in the marker color become transparent; the rest opaque
-    for (int i = 0; i < S * S; i++) { DWORD c = px[i] & 0xFFFFFF; if (c == 0x030201) px[i] = 0; else if (c != 0) px[i] |= 0xFF000000; else px[i] = 0; }
+    // Rounded brand tile with a high-resolution white glyph; transparent corners keep Explorer's taskbar clean.
+    for (int y = 0; y < S; y++) for (int x = 0; x < S; x++) {
+        int dx = x < 22 ? 22 - x : x >= S - 22 ? x - (S - 23) : 0;
+        int dy = y < 22 ? 22 - y : y >= S - 22 ? y - (S - 23) : 0;
+        if (dx * dx + dy * dy <= 22 * 22 && (px[y * S + x] & 0xFFFFFF)) px[y * S + x] |= 0xFF000000; else px[y * S + x] = 0;
+    }
     SelectObject(dc, old); DeleteObject(f); DeleteObject(b); DeleteObject(p); DeleteDC(dc);
     HBITMAP mask = CreateBitmap(S, S, 1, 1, nullptr);
     ICONINFO ii = {TRUE, 0, 0, mask, color}; HICON h = CreateIconIndirect(&ii);
     DeleteObject(mask); DeleteObject(color); return h;
-}
-static bool darkTaskbar() {
-    HKEY h; DWORD v = 1, s = sizeof(v);
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", 0, KEY_READ, &h) == ERROR_SUCCESS) { RegQueryValueExW(h, L"SystemUsesLightTheme", nullptr, nullptr, (LPBYTE)&v, &s); RegCloseKey(h); }
-    return v == 0;
 }
 static void updateTray(int lang) {
     _nid.hIcon = lang ? _iconV : _iconE;
@@ -115,11 +115,12 @@ static LRESULT CALLBACK wndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     case updater::WM_UPDATER: updater::onEvent(wp); return 0;
     case WM_VIKEY_SETLANG: core::setLanguageQuiet((int)wp); return 1;
     case WM_VIKEY_EMOJI: emoji::toggle(); return 0;
+    case WM_VIKEY_TEST_RELOAD: core::reloadSettings(); emoji::settingsChanged(); return 1;
     case WM_TIMER: if (wp == TIMER_FLUSH) core::flushTypingLog(); return 0;
     case site::WM_SITE: { HWND w; std::wstring host = site::lastHost(&w); if (w == GetForegroundWindow()) core::onSiteChanged(host); return 0; }
     case WM_SETTINGCHANGE: {
         if (!lp || wcscmp((LPCWSTR)lp, L"ImmersiveColorSet") != 0) return 0;   // a theme change: every other setting broadcast is ignored
-        bool dark = darkTaskbar(); DestroyIcon(_iconV); DestroyIcon(_iconE); _iconV = makeIcon(L'V', dark); _iconE = makeIcon(L'E', dark); updateTray(core::language()); return 0; }
+        DestroyIcon(_iconV); DestroyIcon(_iconE); _iconV = makeIcon(L'V'); _iconE = makeIcon(L'E'); updateTray(core::language()); ui::themeChanged(); return 0; }
     case WM_DESTROY: core::stop(); Shell_NotifyIconW(NIM_DELETE, &_nid); PostQuitMessage(0); return 0;
     }
     return DefWindowProcW(h, msg, wp, lp);
@@ -134,7 +135,6 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
         if (t) { DWORD pid = 0; GetWindowThreadProcessId(t, &pid); AllowSetForegroundWindow(pid); PostMessageW(t, WM_APP + 3, 0, 0); }   // our foreground right goes to the running Vikey: its window comes to the front
         return 0;
     }
-    SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     if (vikey::updater::installPendingAtLaunch()) return 0;   // an update downloaded earlier installs now and relaunches Vikey
     vikey::prefs::migrateFromOpenKey();
     WNDCLASSW wc = {}; wc.lpfnWndProc = wndProc; wc.hInstance = inst; wc.lpszClassName = L"VikeyTray";
@@ -142,7 +142,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
     // hidden top-level, not HWND_MESSAGE: a message-only window gets no broadcasts (TaskbarCreated, WM_SETTINGCHANGE);
     // WS_EX_TOOLWINDOW keeps it out of the taskbar and Alt+Tab
     _hwnd = CreateWindowExW(WS_EX_TOOLWINDOW, L"VikeyTray", L"Vikey", 0, 0, 0, 0, 0, nullptr, nullptr, inst, nullptr);
-    bool dark = darkTaskbar(); _iconV = makeIcon(L'V', dark); _iconE = makeIcon(L'E', dark);
+    _iconV = makeIcon(L'V'); _iconE = makeIcon(L'E');
     _nid.cbSize = sizeof(_nid); _nid.hWnd = _hwnd; _nid.uID = 1; _nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP; _nid.uCallbackMessage = WM_TRAY; _nid.hIcon = _iconV;
     wcscpy_s(_nid.szTip, L"Vikey");
     Shell_NotifyIconW(NIM_ADD, &_nid);

@@ -16,6 +16,7 @@
 #include <objidl.h>
 #include <d2d1.h>
 #include <dwrite.h>
+#include <dwmapi.h>
 #define GDIPVER 0x0110
 namespace Gdiplus { using std::min; using std::max; }
 #include <gdiplus.h>
@@ -35,14 +36,41 @@ namespace vikey { namespace ui {
 
 // ---- shared look ---------------------------------------------------------------------------
 static HFONT fBody, fBodyBold, fSmall, fWordmark, fTitle, fMono, fTitle2, fCallout, fMonoBold, fWordmark24;
-static const COLORREF BG = RGB(246, 246, 246), GROUP = RGB(255, 255, 255), BORDER = RGB(226, 226, 226), SEP = RGB(236, 236, 236);
-static const COLORREF TEXT = RGB(0, 0, 0), SECONDARY = RGB(110, 110, 115), TERTIARY = RGB(170, 170, 175), ACCENT = RGB(10, 124, 255), GREEN = RGB(52, 199, 89), TOGGLE_OFF = RGB(233, 233, 235);
-static const COLORREF BRAND = RGB(79, 70, 229);   // design/BRAND.md #4F46E5
+static COLORREF BG = RGB(246, 246, 246), GROUP = RGB(255, 255, 255), BORDER = RGB(226, 226, 226), SEP = RGB(236, 236, 236);
+static COLORREF TEXT = RGB(0, 0, 0), SECONDARY = RGB(110, 110, 115), TERTIARY = RGB(170, 170, 175), ACCENT = RGB(10, 124, 255), GREEN = RGB(52, 199, 89), TOGGLE_OFF = RGB(233, 233, 235);
+static COLORREF BRAND = RGB(79, 70, 229);   // design/BRAND.md #4F46E5
 static const int W = 460, MARGIN = 20, ROW = 34, GAP = 12, RADIUS = 10;   // fits a 1366x768 screen with every row shown
 static ULONG_PTR gdipToken = 0;
 static HINSTANCE _inst;
+static const wchar_t* DARK_MODE = L"DarkMode";  // -1 follows Windows; otherwise 0 = light, 1 = dark
+static std::map<COLORREF, HBRUSH> _brushes;
+static bool darkMode() {
+    int value = prefs::getInt(DARK_MODE, -1); if (value >= 0) return value != 0;
+    HKEY key; DWORD apps = 1, size = sizeof(apps);
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", 0, KEY_READ, &key) == ERROR_SUCCESS) {
+        RegQueryValueExW(key, L"AppsUseLightTheme", nullptr, nullptr, (LPBYTE)&apps, &size); RegCloseKey(key);
+    }
+    return apps == 0;
+}
+bool isDarkMode() { return darkMode(); }
+static HBRUSH brushFor(COLORREF c) {
+    auto it = _brushes.find(c); if (it != _brushes.end()) return it->second;
+    HBRUSH b = CreateSolidBrush(c); _brushes[c] = b; return b;
+}
+static void refreshPalette() {
+    if (darkMode()) {
+        BG = RGB(24, 24, 28); GROUP = RGB(34, 34, 39); BORDER = RGB(57, 57, 64); SEP = RGB(51, 51, 58);
+        TEXT = RGB(239, 239, 245); SECONDARY = RGB(174, 174, 186); TERTIARY = RGB(123, 123, 138); ACCENT = RGB(10, 124, 255);
+        GREEN = RGB(48, 209, 88); TOGGLE_OFF = RGB(67, 67, 75); BRAND = RGB(150, 140, 255);
+    } else {
+        BG = RGB(246, 246, 246); GROUP = RGB(255, 255, 255); BORDER = RGB(226, 226, 226); SEP = RGB(236, 236, 236);
+        TEXT = RGB(0, 0, 0); SECONDARY = RGB(110, 110, 115); TERTIARY = RGB(170, 170, 175); ACCENT = RGB(10, 124, 255);
+        GREEN = RGB(52, 199, 89); TOGGLE_OFF = RGB(233, 233, 235); BRAND = RGB(79, 70, 229);
+    }
+}
 static void initLook() {
     if (fBody) return;
+    refreshPalette();
     GdiplusStartupInput in; GdiplusStartup(&gdipToken, &in, nullptr);
     auto mk = [](int px, int weight, const wchar_t* face = L"Segoe UI") { return CreateFontW(-px, 0, 0, 0, weight, 0, 0, 0, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, face); };
     fBody = mk(15, FW_NORMAL); fBodyBold = mk(15, FW_SEMIBOLD); fSmall = mk(13, FW_NORMAL); fWordmark = mk(24, FW_BOLD); fTitle = mk(17, FW_SEMIBOLD); fMono = mk(13, FW_NORMAL, L"Consolas");
@@ -57,14 +85,23 @@ static void roundRect(Graphics& g, RectF r, float radius, Color fill, Color stro
     SolidBrush b(fill); g.FillPath(&b, &p);
     if (stroke.GetA()) { Pen pen(stroke, strokeW); g.DrawPath(&pen, &p); }
 }
+static std::wstring keyDisplay(int k) {
+    if (k < 0) return L"Chưa đặt";
+    if (k == 0xFE) return L"Không";
+    if (k == KEY_SPACE) return L"Space";
+    if (k == KEY_RETURN) return L"Enter";
+    if (k == KEY_TAB) return L"Tab";
+    if (k == KEY_ESC) return L"Esc";
+    Uint16 ch = keyCodeToCharacter(k);
+    if (ch >= L'a' && ch <= L'z') ch = (Uint16)(ch - L'a' + L'A');
+    return ch ? std::wstring(1, (wchar_t)ch) : L"?";
+}
 static std::wstring hotkeyDisplay(int hk) {
     std::wstring s;
     if (HAS_CONTROL(hk)) s += L"Ctrl+"; if (HAS_OPTION(hk)) s += L"Alt+"; if (HAS_SHIFT(hk)) s += L"Shift+"; if (HAS_COMMAND(hk)) s += L"Win+";
     int k = GET_SWITCH_KEY(hk);
-    if (k != 0xFE) {
-        Uint16 ch = keyCodeToCharacter(k | CAPS_MASK);
-        if (k == KEY_SPACE) s += L"Space"; else if (k == KEY_RETURN) s += L"Enter"; else if (k == KEY_TAB) s += L"Tab"; else if (ch) s += (wchar_t)ch; else s += L"?";
-    } else if (!s.empty()) s.pop_back();
+    if (k != 0xFE) s += keyDisplay(k);
+    else if (!s.empty()) s.pop_back();
     return s.empty() ? L"—" : s;
 }
 static int currentHotkey() { int hk = prefs::getInt(L"SwitchKeyStatus", 0); return hk ? hk : 0x7A000206; }
@@ -101,7 +138,12 @@ static void centerOnMouseScreen(HWND h) {
     if (y < a.top) y = a.top; if (x < a.left) x = a.left;
     SetWindowPos(h, nullptr, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
 }
-static void bringToFront(HWND h) { ShowWindow(h, SW_SHOW); SetForegroundWindow(h); }
+static void bringToFront(HWND h) {
+    BOOL immersiveDark = darkMode();
+    if (FAILED(DwmSetWindowAttribute(h, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, &immersiveDark, sizeof(immersiveDark))))
+        DwmSetWindowAttribute(h, 19, &immersiveDark, sizeof(immersiveDark));
+    ShowWindow(h, SW_SHOW); SetForegroundWindow(h);
+}
 
 // Lines of text with links, drawn by hand so they can be centred (About) and hit-tested.
 struct Seg { std::wstring text; std::wstring url; HFONT font; COLORREF color; };
@@ -123,7 +165,7 @@ static const Link* linkAt(const std::vector<Link>& links, LPARAM lp) { POINT p =
 
 // ---- custom controls -----------------------------------------------------------------------
 // The background a control sits on: white in groups and onboarding, gray on the window.
-static COLORREF bgOf(HWND h) { UINT_PTR v = (UINT_PTR)GetPropW(h, L"vkbg"); return v ? (COLORREF)(v - 1) : GROUP; }
+static COLORREF bgOf(HWND h) { UINT_PTR v = (UINT_PTR)GetPropW(h, L"vkbg"); return darkMode() ? GROUP : (v ? (COLORREF)(v - 1) : GROUP); }
 static void setBg(HWND h, COLORREF c) { SetPropW(h, L"vkbg", (HANDLE)(UINT_PTR)(c + 1)); }
 
 // Toggle switch: GWLP_USERDATA = on/off; BN_CLICKED to the parent on change; disabled = grayed.
@@ -189,7 +231,7 @@ static LRESULT CALLBACK buttonProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         HBRUSH bg = CreateSolidBrush(bgOf(h)); FillRect(mem, &rc, bg); DeleteObject(bg);
         Graphics g(mem); g.SetSmoothingMode(SmoothingModeAntiAlias);
         bool prominent = GetWindowLongPtrW(h, GWLP_USERDATA) != 0, enabled = IsWindowEnabled(h), down = GetPropW(h, L"vkdown") != nullptr;
-        Color fill = prominent ? gp(ACCENT, enabled ? (down ? 210 : 255) : 90) : gp(down ? RGB(218, 218, 222) : RGB(232, 232, 236));
+        Color fill = prominent ? gp(ACCENT, enabled ? (down ? 210 : 255) : 90) : gp(down ? (darkMode() ? RGB(55, 55, 62) : RGB(218, 218, 222)) : (darkMode() ? RGB(47, 47, 54) : RGB(232, 232, 236)));
         roundRect(g, RectF(0.5f, 0.5f, (float)rc.right - 1, (float)rc.bottom - 1), 7, fill, prominent ? Color(0, 0, 0, 0) : gp(RGB(214, 214, 218)));
         wchar_t t[64]; GetWindowTextW(h, t, 64);
         SelectObject(mem, fBody); SetBkMode(mem, TRANSPARENT); SetTextColor(mem, prominent ? RGB(255, 255, 255) : (enabled ? TEXT : TERTIARY));
@@ -213,7 +255,7 @@ static LRESULT CALLBACK buttonProc(HWND h, UINT m, WPARAM w, LPARAM l) {
 // also takes modifiers alone (Ctrl+Shift); the emoji hotkey needs a key with Ctrl, Alt or Win.
 struct Recorder { const wchar_t* pref; bool modsOnly; bool recording; int value; };
 static Recorder* rec(HWND h) { return (Recorder*)GetWindowLongPtrW(h, GWLP_USERDATA); }
-static void afterHotkeyChange();
+static void afterHotkeyChange(bool rebuildMain = true);
 static void commitRecorder(HWND h, int value) {
     Recorder* r = rec(h);
     if (!r->modsOnly) {   // the emoji hotkey: a key with Ctrl/Alt/Win, and not the language switch
@@ -235,7 +277,7 @@ static LRESULT CALLBACK hotkeyProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         HBRUSH bg = CreateSolidBrush(bgOf(h)); FillRect(mem, &rc, bg); DeleteObject(bg);
         Graphics g(mem); g.SetSmoothingMode(SmoothingModeAntiAlias);
         bool recording = r && r->recording;
-        roundRect(g, RectF(0.5f, 0.5f, (float)rc.right - 1, (float)rc.bottom - 1), 7, gp(RGB(230, 230, 230)), recording ? gp(ACCENT) : Color(0, 0, 0, 0), 1.5f);
+        roundRect(g, RectF(0.5f, 0.5f, (float)rc.right - 1, (float)rc.bottom - 1), 7, gp(darkMode() ? RGB(47, 47, 54) : RGB(230, 230, 230)), recording ? gp(ACCENT) : gp(BORDER), 1.5f);
         SelectObject(mem, fBody); SetBkMode(mem, TRANSPARENT); SetTextColor(mem, recording ? SECONDARY : TEXT);
         std::wstring t = recording ? L"Bấm phím tắt…" : (r && r->value == 0) ? L"Chưa đặt" : hotkeyDisplay(r ? r->value : 0);
         DrawTextW(mem, t.c_str(), -1, &rc, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
@@ -270,14 +312,339 @@ static LRESULT CALLBACK hotkeyProc(HWND h, UINT m, WPARAM w, LPARAM l) {
     return DefWindowProcW(h, m, w, l);
 }
 
+struct KeyOption { int code; const wchar_t* label; };
+static const KeyOption KEY_OPTIONS[] = {
+    {0xFE, L"Không (chỉ tổ hợp)"},
+    {KEY_SPACE, L"Space"}, {KEY_TAB, L"Tab"}, {KEY_RETURN, L"Enter"},
+    {KEY_A, L"A"}, {KEY_B, L"B"}, {KEY_C, L"C"}, {KEY_D, L"D"}, {KEY_E, L"E"}, {KEY_F, L"F"}, {KEY_G, L"G"},
+    {KEY_H, L"H"}, {KEY_I, L"I"}, {KEY_J, L"J"}, {KEY_K, L"K"}, {KEY_L, L"L"}, {KEY_M, L"M"}, {KEY_N, L"N"},
+    {KEY_O, L"O"}, {KEY_P, L"P"}, {KEY_Q, L"Q"}, {KEY_R, L"R"}, {KEY_S, L"S"}, {KEY_T, L"T"}, {KEY_U, L"U"},
+    {KEY_V, L"V"}, {KEY_W, L"W"}, {KEY_X, L"X"}, {KEY_Y, L"Y"}, {KEY_Z, L"Z"},
+    {KEY_1, L"1"}, {KEY_2, L"2"}, {KEY_3, L"3"}, {KEY_4, L"4"}, {KEY_5, L"5"},
+    {KEY_6, L"6"}, {KEY_7, L"7"}, {KEY_8, L"8"}, {KEY_9, L"9"}, {KEY_0, L"0"},
+    {KEY_BACKQUOTE, L"`"}, {KEY_MINUS, L"-"}, {KEY_EQUALS, L"="},
+    {KEY_LEFT_BRACKET, L"["}, {KEY_RIGHT_BRACKET, L"]"}, {KEY_BACK_SLASH, L"\\"},
+    {KEY_SEMICOLON, L";"}, {KEY_QUOTE, L"'"}, {KEY_COMMA, L","}, {KEY_DOT, L"."}, {KEY_SLASH, L"/"},
+};
+static const int KEY_OPTION_COUNT = (int)(sizeof(KEY_OPTIONS) / sizeof(KEY_OPTIONS[0]));
+static bool isSupportedShortcutKey(int code) {
+    for (int i = 1; i < KEY_OPTION_COUNT; i++) if (KEY_OPTIONS[i].code == code) return true;
+    return false;
+}
+
+struct ShortcutState { const wchar_t* pref; bool allowModsOnly; int mods; int key; bool recording; int hoverPart; HWND popup; };
+static const struct { int bit; const wchar_t* label; } SC_MODS[4] = {{0x100, L"Ctrl"}, {0x800, L"Shift"}, {0x200, L"Alt"}, {0x400, L"Win"}};
+static const int SC_CAPTURE_W = 108, SC_DROP_X = 116, SC_DROP_W = 108, SC_ROW2_Y = 34, SC_PILL_H = 30;
+struct KeyPopupData { HWND owner; HWND list; int hover; int startIdx; };
+
+static ShortcutState* scState(HWND h) { return (ShortcutState*)GetWindowLongPtrW(h, GWLP_USERDATA); }
+static bool scValid(const ShortcutState* s, std::wstring* err = nullptr) {
+    if (s->key < 0) { if (err) *err = L"Chưa đặt phím"; return false; }
+    int n = !!(s->mods & 0x100) + !!(s->mods & 0x200) + !!(s->mods & 0x400) + !!(s->mods & 0x800);
+    if (s->allowModsOnly) {
+        if (s->key == 0xFE && n < 2) { if (err) *err = L"Chọn ít nhất 2 phím"; return false; }
+        if (s->key != 0xFE && n < 1) { if (err) *err = L"Chọn ít nhất 1 phím"; return false; }
+        if (prefs::getInt(L"EmojiPicker", 0) && (s->mods | s->key) == (prefs::getInt(L"EmojiHotkey", 0) & 0xFFF)) {
+            if (err) *err = L"Trùng phím Emoji";
+            return false;
+        }
+    } else {
+        if (s->key == 0xFE) { if (err) *err = L"Chọn phím chính"; return false; }
+        if (!(s->mods & 0x700)) { if (err) *err = L"Cần Ctrl, Alt hoặc Win"; return false; }
+        if ((s->mods | s->key) == (currentHotkey() & 0xFFF)) {
+            if (err) *err = L"Trùng phím chuyển";
+            return false;
+        }
+    }
+    return true;
+}
+static void scApply(HWND h, ShortcutState* s) {
+    InvalidateRect(h, nullptr, FALSE);
+    if (!scValid(s)) return;
+    int hk = (s->allowModsOnly ? (currentHotkey() & 0x8000) : 0) | s->mods | (s->key & 0xFF);
+    prefs::setInt(s->pref, hk);
+    core::reloadSettings();
+    SendMessageW(GetParent(h), WM_COMMAND, MAKEWPARAM(GetDlgCtrlID(h), BN_CLICKED), (LPARAM)h);
+}
+static RECT scModRect(HDC dc, int idx) {
+    int x = 0;
+    for (int i = 0; i < 4; i++) {
+        int w = 22 + textWidth(dc, fBody, SC_MODS[i].label) + 4;
+        if (i == idx) return {x, 1, x + w, 25};
+        x += w + 14;
+    }
+    return {};
+}
+static int scHitTest(HWND h, POINT pt) {
+    HDC dc = GetDC(h);
+    for (int i = 0; i < 4; i++) { RECT r = scModRect(dc, i); if (PtInRect(&r, pt)) { ReleaseDC(h, dc); return i; } }
+    ReleaseDC(h, dc);
+    RECT cap = {0, SC_ROW2_Y, SC_CAPTURE_W, SC_ROW2_Y + SC_PILL_H};
+    if (PtInRect(&cap, pt)) return 4;
+    RECT drop = {SC_DROP_X, SC_ROW2_Y, SC_DROP_X + SC_DROP_W, SC_ROW2_Y + SC_PILL_H};
+    if (PtInRect(&drop, pt)) return 5;
+    return -1;
+}
+static void scClosePopup(HWND owner) {
+    ShortcutState* s = scState(owner);
+    if (s && s->popup && IsWindow(s->popup)) DestroyWindow(s->popup);
+    if (s) s->popup = nullptr;
+    InvalidateRect(owner, nullptr, FALSE);
+}
+static void scCommitPopupSelection(HWND popupFrame, int index) {
+    KeyPopupData* pd = (KeyPopupData*)GetWindowLongPtrW(popupFrame, GWLP_USERDATA);
+    if (!pd) return;
+    int realIdx = pd->startIdx + index;
+    if (index < 0 || realIdx >= KEY_OPTION_COUNT) return;
+    HWND owner = pd->owner;
+    if (ShortcutState* s = scState(owner)) {
+        s->key = KEY_OPTIONS[realIdx].code;
+        s->recording = false;
+        scApply(owner, s);
+    }
+    DestroyWindow(popupFrame);
+    SetFocus(owner);
+}
+static LRESULT CALLBACK keyListSubclassProc(HWND h, UINT m, WPARAM w, LPARAM l, UINT_PTR, DWORD_PTR) {
+    HWND frame = GetParent(h);
+    KeyPopupData* pd = (KeyPopupData*)GetWindowLongPtrW(frame, GWLP_USERDATA);
+    switch (m) {
+    case WM_MOUSEMOVE: {
+        TRACKMOUSEEVENT tme = {sizeof(tme), TME_LEAVE, h, 0}; TrackMouseEvent(&tme);
+        LRESULT res = SendMessageW(h, LB_ITEMFROMPOINT, 0, l);
+        int idx = HIWORD(res) == 0 ? (int)LOWORD(res) : -1;
+        if (pd && pd->hover != idx) { pd->hover = idx; InvalidateRect(h, nullptr, FALSE); }
+        break; }
+    case WM_MOUSELEAVE:
+        if (pd && pd->hover != -1) { pd->hover = -1; InvalidateRect(h, nullptr, FALSE); }
+        break;
+    case WM_LBUTTONUP: {
+        DefSubclassProc(h, m, w, l);
+        LRESULT res = SendMessageW(h, LB_ITEMFROMPOINT, 0, l);
+        int idx = HIWORD(res) == 0 ? (int)LOWORD(res) : (int)SendMessageW(h, LB_GETCURSEL, 0, 0);
+        scCommitPopupSelection(frame, idx);
+        return 0; }
+    case WM_KEYDOWN:
+        if (w == VK_RETURN) { scCommitPopupSelection(frame, (int)SendMessageW(h, LB_GETCURSEL, 0, 0)); return 0; }
+        if (w == VK_ESCAPE) { HWND owner = pd ? pd->owner : nullptr; DestroyWindow(frame); if (owner) SetFocus(owner); return 0; }
+        break;
+    case WM_KILLFOCUS:
+        if ((HWND)w != frame) PostMessageW(frame, WM_CLOSE, 0, 0);
+        break;
+    }
+    return DefSubclassProc(h, m, w, l);
+}
+static LRESULT CALLBACK keyPopupProc(HWND h, UINT m, WPARAM w, LPARAM l) {
+    KeyPopupData* pd = (KeyPopupData*)GetWindowLongPtrW(h, GWLP_USERDATA);
+    switch (m) {
+    case WM_PAINT: {
+        PAINTSTRUCT ps; HDC dc = BeginPaint(h, &ps); RECT rc; GetClientRect(h, &rc);
+        HBRUSH bg = CreateSolidBrush(GROUP); FillRect(dc, &rc, bg); DeleteObject(bg);
+        HPEN pen = CreatePen(PS_SOLID, 1, BORDER); HGDIOBJ oldP = SelectObject(dc, pen); HGDIOBJ oldB = SelectObject(dc, GetStockObject(NULL_BRUSH));
+        Rectangle(dc, 0, 0, rc.right, rc.bottom);
+        SelectObject(dc, oldP); SelectObject(dc, oldB); DeleteObject(pen);
+        EndPaint(h, &ps); return 0; }
+    case WM_ERASEBKGND: return 1;
+    case WM_MEASUREITEM: { MEASUREITEMSTRUCT* mis = (MEASUREITEMSTRUCT*)l; if (mis) { mis->itemHeight = 26; return TRUE; } break; }
+    case WM_DRAWITEM: {
+        DRAWITEMSTRUCT* dis = (DRAWITEMSTRUCT*)l;
+        if (!dis || dis->CtlType != ODT_LISTBOX || dis->itemID == (UINT)-1) break;
+        bool selected = (dis->itemState & ODS_SELECTED) != 0;
+        bool hovered = pd && (int)dis->itemID == pd->hover;
+        COLORREF bg = selected ? ACCENT : (hovered ? (darkMode() ? RGB(52, 52, 60) : RGB(236, 236, 242)) : GROUP);
+        HBRUSH b = CreateSolidBrush(bg); FillRect(dis->hDC, &dis->rcItem, b); DeleteObject(b);
+        wchar_t buf[64] = {}; SendMessageW(dis->hwndItem, LB_GETTEXT, dis->itemID, (LPARAM)buf);
+        HGDIOBJ oldF = SelectObject(dis->hDC, fBody);
+        SetBkMode(dis->hDC, TRANSPARENT); SetTextColor(dis->hDC, selected ? RGB(255, 255, 255) : TEXT);
+        RECT tr = dis->rcItem; tr.left += 10; tr.right -= 8;
+        DrawTextW(dis->hDC, buf, -1, &tr, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        SelectObject(dis->hDC, oldF);
+        return TRUE; }
+    case WM_CTLCOLORLISTBOX: SetBkColor((HDC)w, GROUP); return (LRESULT)brushFor(GROUP);
+    case WM_CLOSE: DestroyWindow(h); return 0;
+    case WM_DESTROY:
+        if (pd && pd->owner && IsWindow(pd->owner)) {
+            if (ShortcutState* s = scState(pd->owner)) s->popup = nullptr;
+            InvalidateRect(pd->owner, nullptr, FALSE);
+        }
+        delete pd; SetWindowLongPtrW(h, GWLP_USERDATA, 0); return 0;
+    }
+    return DefWindowProcW(h, m, w, l);
+}
+static void scOpenPopup(HWND owner, ShortcutState* s) {
+    if (s->popup && IsWindow(s->popup)) { scClosePopup(owner); return; }
+    s->recording = false;
+    const int pw = 166, ph = 8 * 26 + 2;
+    RECT wr; GetWindowRect(owner, &wr);
+    POINT pt = {wr.left + SC_DROP_X, wr.top + SC_ROW2_Y + SC_PILL_H + 4};
+    HMONITOR mon = MonitorFromRect(&wr, MONITOR_DEFAULTTONEAREST); MONITORINFO mi = {sizeof(mi)}; GetMonitorInfoW(mon, &mi);
+    if (pt.y + ph > mi.rcWork.bottom) pt.y = wr.top + SC_ROW2_Y - ph - 4;
+    if (pt.x + pw > mi.rcWork.right) pt.x = mi.rcWork.right - pw;
+    HWND popup = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW, L"VikeyKeyPopup", L"", WS_POPUP, pt.x, pt.y, pw, ph, owner, nullptr, _inst, nullptr);
+    if (!popup) return;
+    HWND list = CreateWindowW(L"LISTBOX", L"", WS_CHILD | WS_VISIBLE | WS_VSCROLL | LBS_OWNERDRAWFIXED | LBS_HASSTRINGS | LBS_NOTIFY | LBS_NOINTEGRALHEIGHT,
+                              1, 1, pw - 2, ph - 2, popup, (HMENU)1, nullptr, nullptr);
+    int startIdx = s->allowModsOnly ? 0 : 1;
+    SetWindowLongPtrW(popup, GWLP_USERDATA, (LONG_PTR)new KeyPopupData{owner, list, -1, startIdx});
+    int cur = 0;
+    for (int i = startIdx; i < KEY_OPTION_COUNT; i++) {
+        SendMessageW(list, LB_ADDSTRING, 0, (LPARAM)KEY_OPTIONS[i].label);
+        if (KEY_OPTIONS[i].code == s->key) cur = i - startIdx;
+    }
+    SendMessageW(list, LB_SETCURSEL, cur, 0);
+    SendMessageW(list, LB_SETTOPINDEX, std::max(0, cur - 3), 0);
+    SetWindowSubclass(list, keyListSubclassProc, 1, 0);
+    s->popup = popup;
+    ShowWindow(popup, SW_SHOW);
+    SetFocus(list);
+    InvalidateRect(owner, nullptr, FALSE);
+}
+static LRESULT CALLBACK shortcutProc(HWND h, UINT m, WPARAM w, LPARAM l) {
+    ShortcutState* s = scState(h);
+    switch (m) {
+    case WM_PAINT: {
+        PAINTSTRUCT ps; HDC dc = BeginPaint(h, &ps); RECT rc; GetClientRect(h, &rc);
+        HDC mem = CreateCompatibleDC(dc); HBITMAP bmp = CreateCompatibleBitmap(dc, rc.right, rc.bottom); HGDIOBJ old = SelectObject(mem, bmp);
+        HBRUSH bg = CreateSolidBrush(GROUP); FillRect(mem, &rc, bg); DeleteObject(bg);
+        Graphics g(mem); g.SetSmoothingMode(SmoothingModeAntiAlias);
+        bool dark = darkMode();
+        // row 1: circular modifier checkboxes
+        for (int i = 0; i < 4; i++) {
+            RECT mr = scModRect(mem, i);
+            bool checked = (s && (s->mods & SC_MODS[i].bit)) != 0;
+            bool hover = s && s->hoverPart == i;
+            float cx = (float)mr.left + 8.5f, cy = (float)mr.top + 12.0f, r = 7.5f;
+            if (checked) {
+                Color fill = hover ? Color(255, 36, 140, 255) : gp(ACCENT);
+                SolidBrush b(fill); g.FillEllipse(&b, cx - r, cy - r, r * 2, r * 2);
+                Pen ck(Color(255, 255, 255, 255), 1.8f); ck.SetStartCap(LineCapRound); ck.SetEndCap(LineCapRound); ck.SetLineJoin(LineJoinRound);
+                PointF pts[3] = {{cx - 3.6f, cy + 0.3f}, {cx - 0.9f, cy + 3.0f}, {cx + 3.8f, cy - 2.6f}};
+                g.DrawLines(&ck, pts, 3);
+            } else {
+                Color fill = dark ? Color(255, 42, 42, 49) : Color(255, 246, 246, 249);
+                Color stroke = hover ? gp(TEXT) : (dark ? Color(255, 96, 96, 108) : Color(255, 178, 178, 188));
+                SolidBrush b(fill); Pen p(stroke, 1.4f);
+                g.FillEllipse(&b, cx - r, cy - r, r * 2, r * 2);
+                g.DrawEllipse(&p, cx - r, cy - r, r * 2, r * 2);
+            }
+            SelectObject(mem, fBody); SetBkMode(mem, TRANSPARENT); SetTextColor(mem, (checked || hover) ? TEXT : SECONDARY);
+            RECT tr = {mr.left + 22, mr.top, mr.right, mr.bottom};
+            DrawTextW(mem, SC_MODS[i].label, -1, &tr, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        }
+        // row 2 left: key capture pill
+        Color pillFill = dark ? gp(RGB(47, 47, 54)) : gp(RGB(238, 238, 242));
+        Color pillHover = dark ? gp(RGB(58, 58, 66)) : gp(RGB(228, 228, 234));
+        bool recOn = s && s->recording;
+        Color capFill = recOn ? (dark ? Color(255, 26, 42, 68) : Color(255, 232, 242, 255)) : (s && s->hoverPart == 4 ? pillHover : pillFill);
+        roundRect(g, RectF(0.5f, (float)SC_ROW2_Y + 0.5f, (float)SC_CAPTURE_W - 1, (float)SC_PILL_H - 1), 7, capFill, recOn ? gp(ACCENT) : gp(BORDER), recOn ? 1.5f : 1.0f);
+        SetBkMode(mem, TRANSPARENT);
+        if (recOn) {
+            SelectObject(mem, fBodyBold); SetTextColor(mem, ACCENT);
+            RECT cr = {0, SC_ROW2_Y, SC_CAPTURE_W, SC_ROW2_Y + SC_PILL_H};
+            DrawTextW(mem, L"Bấm phím…", -1, &cr, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        } else if (s && s->key < 0) {
+            SelectObject(mem, fBody); SetTextColor(mem, SECONDARY);
+            RECT cr = {0, SC_ROW2_Y, SC_CAPTURE_W, SC_ROW2_Y + SC_PILL_H};
+            DrawTextW(mem, L"Chưa đặt", -1, &cr, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        } else {
+            std::wstring prefix = L"Phím: ", ktxt = keyDisplay(s ? s->key : KEY_Z);
+            int w1 = textWidth(mem, fBody, prefix), w2 = textWidth(mem, fBodyBold, ktxt);
+            int sx = std::max(8, (SC_CAPTURE_W - (w1 + w2)) / 2);
+            RECT r1 = {sx, SC_ROW2_Y, sx + w1, SC_ROW2_Y + SC_PILL_H};
+            RECT r2 = {sx + w1, SC_ROW2_Y, SC_CAPTURE_W - 6, SC_ROW2_Y + SC_PILL_H};
+            SelectObject(mem, fBody); SetTextColor(mem, SECONDARY); DrawTextW(mem, prefix.c_str(), -1, &r1, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+            SelectObject(mem, fBodyBold); SetTextColor(mem, TEXT); DrawTextW(mem, ktxt.c_str(), -1, &r2, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+        }
+        // row 2 middle: key dropdown pill
+        bool popOpen = s && s->popup && IsWindow(s->popup);
+        Color dropFill = popOpen || (s && s->hoverPart == 5) ? pillHover : pillFill;
+        roundRect(g, RectF((float)SC_DROP_X + 0.5f, (float)SC_ROW2_Y + 0.5f, (float)SC_DROP_W - 1, (float)SC_PILL_H - 1), 7, dropFill, popOpen ? gp(ACCENT) : gp(BORDER), popOpen ? 1.5f : 1.0f);
+        SelectObject(mem, fBody); SetTextColor(mem, (s && s->key < 0) ? SECONDARY : TEXT);
+        RECT dr = {SC_DROP_X + 12, SC_ROW2_Y, SC_DROP_X + SC_DROP_W - 24, SC_ROW2_Y + SC_PILL_H};
+        DrawTextW(mem, (s && s->key < 0) ? L"Chọn phím" : keyDisplay(s ? s->key : KEY_Z).c_str(), -1, &dr, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+        Pen chev(gp(SECONDARY), 1.6f); chev.SetStartCap(LineCapRound); chev.SetEndCap(LineCapRound); chev.SetLineJoin(LineJoinRound);
+        float ax = (float)(SC_DROP_X + SC_DROP_W - 14), ay = (float)SC_ROW2_Y + SC_PILL_H * 0.5f;
+        float dy = popOpen ? -2.0f : 2.0f;
+        PointF cpts[3] = {{ax - 3.8f, ay - dy}, {ax, ay + dy}, {ax + 3.8f, ay - dy}};
+        g.DrawLines(&chev, cpts, 3);
+        // row 2 right: preview or inline validation
+        std::wstring err;
+        int px = SC_DROP_X + SC_DROP_W + 12;
+        if (s && scValid(s, &err)) {
+            int aw = textWidth(mem, fBody, L"→ ");
+            SelectObject(mem, fBody); SetTextColor(mem, SECONDARY);
+            RECT ar = {px, SC_ROW2_Y, px + aw, SC_ROW2_Y + SC_PILL_H};
+            DrawTextW(mem, L"→ ", -1, &ar, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+            SelectObject(mem, fBodyBold); SetTextColor(mem, ACCENT);
+            RECT pr = {px + aw, SC_ROW2_Y, rc.right, SC_ROW2_Y + SC_PILL_H};
+            DrawTextW(mem, hotkeyDisplay(s->mods | s->key).c_str(), -1, &pr, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+        } else if (s) {
+            SelectObject(mem, fSmall); SetTextColor(mem, RGB(255, 149, 0));
+            RECT pr = {px, SC_ROW2_Y, rc.right, SC_ROW2_Y + SC_PILL_H};
+            DrawTextW(mem, err.c_str(), -1, &pr, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+        }
+        BitBlt(dc, 0, 0, rc.right, rc.bottom, mem, 0, 0, SRCCOPY); SelectObject(mem, old); DeleteObject(bmp); DeleteDC(mem); EndPaint(h, &ps); return 0; }
+    case WM_MOUSEMOVE: {
+        if (!s) break;
+        TRACKMOUSEEVENT tme = {sizeof(tme), TME_LEAVE, h, 0}; TrackMouseEvent(&tme);
+        int part = scHitTest(h, {GET_X_LPARAM(l), GET_Y_LPARAM(l)});
+        if (part != s->hoverPart) { s->hoverPart = part; InvalidateRect(h, nullptr, FALSE); }
+        return 0; }
+    case WM_MOUSELEAVE:
+        if (s && s->hoverPart != -1) { s->hoverPart = -1; InvalidateRect(h, nullptr, FALSE); }
+        return 0;
+    case WM_LBUTTONUP: {
+        if (!s) break;
+        int part = scHitTest(h, {GET_X_LPARAM(l), GET_Y_LPARAM(l)});
+        if (part >= 0 && part < 4) {
+            scClosePopup(h); s->recording = false;
+            s->mods ^= SC_MODS[part].bit;
+            scApply(h, s);
+        } else if (part == 4) {
+            scClosePopup(h);
+            s->recording = !s->recording;
+            if (s->recording) SetFocus(h);
+            InvalidateRect(h, nullptr, FALSE);
+        } else if (part == 5) {
+            scOpenPopup(h, s);
+        } else if (s->recording) {
+            s->recording = false; InvalidateRect(h, nullptr, FALSE);
+        }
+        return 0; }
+    case WM_KILLFOCUS:
+        if (s && s->recording) { s->recording = false; InvalidateRect(h, nullptr, FALSE); }
+        return 0;
+    case WM_GETDLGCODE: return (s && s->recording) ? DLGC_WANTALLKEYS : 0;
+    case WM_CHAR: case WM_SYSCHAR: return 0;
+    case WM_KEYDOWN: case WM_SYSKEYDOWN: {
+        if (!s || !s->recording) break;
+        DWORD vk = (DWORD)w;
+        bool ctrl = GetKeyState(VK_CONTROL) < 0, alt = GetKeyState(VK_MENU) < 0, shift = GetKeyState(VK_SHIFT) < 0, win = GetKeyState(VK_LWIN) < 0 || GetKeyState(VK_RWIN) < 0;
+        if (vk == VK_ESCAPE && !ctrl && !alt && !win && !shift) { s->recording = false; InvalidateRect(h, nullptr, FALSE); return 0; }
+        if (isModVk(vk)) return 0;
+        int key = (int)engineKey(vk);
+        if (!isSupportedShortcutKey(key)) return 0;
+        if (ctrl || alt || win || shift) s->mods = (ctrl ? 0x100 : 0) | (alt ? 0x200 : 0) | (win ? 0x400 : 0) | (shift ? 0x800 : 0);
+        s->key = key; s->recording = false;
+        scApply(h, s);
+        return 0; }
+    case WM_ERASEBKGND: return 1;
+    case WM_SETCURSOR: SetCursor(LoadCursor(nullptr, (s && s->hoverPart >= 0) ? IDC_HAND : IDC_ARROW)); return TRUE;
+    case WM_NCDESTROY:
+        if (s) { scClosePopup(h); delete s; SetWindowLongPtrW(h, GWLP_USERDATA, 0); }
+        break;
+    }
+    return DefWindowProcW(h, m, w, l);
+}
+
 // (?) tip: a small circle with a question mark; hover shows the tip, click shows it as a popup.
 static LRESULT CALLBACK tipProc(HWND h, UINT m, WPARAM w, LPARAM l) {
     switch (m) {
     case WM_PAINT: {
         PAINTSTRUCT ps; HDC dc = BeginPaint(h, &ps); RECT rc; GetClientRect(h, &rc);
         HBRUSH bg = CreateSolidBrush(GROUP); FillRect(dc, &rc, bg); DeleteObject(bg);
-        Graphics g(dc); g.SetSmoothingMode(SmoothingModeAntiAlias); Pen p(gp(RGB(170, 170, 175)), 1.2f); g.DrawEllipse(&p, 1.5f, 1.5f, 13.0f, 13.0f);
-        SelectObject(dc, fSmall); SetBkMode(dc, TRANSPARENT); SetTextColor(dc, RGB(150, 150, 155)); RECT r = {0, -1, 16, 16}; DrawTextW(dc, L"?", 1, &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        Graphics g(dc); g.SetSmoothingMode(SmoothingModeAntiAlias); Pen p(gp(TERTIARY), 1.2f); g.DrawEllipse(&p, 1.5f, 1.5f, 13.0f, 13.0f);
+        SelectObject(dc, fSmall); SetBkMode(dc, TRANSPARENT); SetTextColor(dc, TERTIARY); RECT r = {0, -1, 16, 16}; DrawTextW(dc, L"?", 1, &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
         EndPaint(h, &ps); return 0; }
     case WM_LBUTTONUP: { wchar_t t[512]; GetWindowTextW(h, t, 512); MessageBoxW(GetParent(h), t, L"Vikey", MB_OK | MB_ICONINFORMATION); return 0; }
     case WM_ERASEBKGND: return 1;
@@ -285,14 +652,34 @@ static LRESULT CALLBACK tipProc(HWND h, UINT m, WPARAM w, LPARAM l) {
     return DefWindowProcW(h, m, w, l);
 }
 
+static LRESULT CALLBACK navProc(HWND h, UINT m, WPARAM w, LPARAM l);
 static void registerClasses(HINSTANCE inst) {
     static bool done = false; if (done) return; done = true;
-    struct { const wchar_t* name; WNDPROC proc; } cls[] = {{L"VikeyToggle", toggleProc}, {L"VikeySegmented", segProc}, {L"VikeyHotkey", hotkeyProc}, {L"VikeyTip", tipProc}, {L"VikeyButton", buttonProc}};
-    for (auto& c : cls) { WNDCLASSW wc = {}; wc.lpfnWndProc = c.proc; wc.hInstance = inst; wc.lpszClassName = c.name; wc.hCursor = LoadCursor(nullptr, IDC_ARROW); RegisterClassW(&wc); }
+    struct { const wchar_t* name; WNDPROC proc; UINT style; } cls[] = {
+        {L"VikeyToggle", toggleProc, 0}, {L"VikeySegmented", segProc, 0}, {L"VikeyNav", navProc, 0},
+        {L"VikeyHotkey", hotkeyProc, 0}, {L"VikeyShortcut", shortcutProc, 0}, {L"VikeyKeyPopup", keyPopupProc, CS_DROPSHADOW},
+        {L"VikeyTip", tipProc, 0}, {L"VikeyButton", buttonProc, 0},
+    };
+    for (auto& c : cls) { WNDCLASSW wc = {}; wc.lpfnWndProc = c.proc; wc.hInstance = inst; wc.lpszClassName = c.name; wc.style = c.style; wc.hCursor = LoadCursor(nullptr, IDC_ARROW); RegisterClassW(&wc); }
 }
 static HWND makeChild(HWND parent, const wchar_t* cls, const wchar_t* text, DWORD style, int x, int y, int w, int h, int id, HFONT f = nullptr) {
     HWND c = CreateWindowW(cls, text, WS_CHILD | WS_VISIBLE | style, x, y, w, h, parent, (HMENU)(INT_PTR)id, nullptr, nullptr);
     if (f) SendMessageW(c, WM_SETFONT, (WPARAM)f, TRUE); return c;
+}
+static void drawComboItem(const DRAWITEMSTRUCT* dis) {
+    if (!dis) return;
+    bool selected = (dis->itemState & ODS_SELECTED) != 0;
+    COLORREF bg = selected ? ACCENT : GROUP;
+    HBRUSH b = CreateSolidBrush(bg); FillRect(dis->hDC, &dis->rcItem, b); DeleteObject(b);
+    wchar_t text[96] = {};
+    if (dis->itemID == (UINT)-1) GetWindowTextW(dis->hwndItem, text, 96);
+    else SendMessageW(dis->hwndItem, CB_GETLBTEXT, dis->itemID, (LPARAM)text);
+    HGDIOBJ oldFont = SelectObject(dis->hDC, fBody);
+    SetBkMode(dis->hDC, TRANSPARENT); SetTextColor(dis->hDC, selected ? RGB(255, 255, 255) : TEXT);
+    RECT r = dis->rcItem; r.left += 8; r.right -= 8;
+    DrawTextW(dis->hDC, text, -1, &r, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    if (dis->itemState & ODS_FOCUS) DrawFocusRect(dis->hDC, &dis->rcItem);
+    SelectObject(dis->hDC, oldFont);
 }
 static HWND makeRecorder(HWND parent, const wchar_t* pref, bool modsOnly, int value, int x, int y, int w, int h, int id, COLORREF bg) {
     HWND c = makeChild(parent, L"VikeyHotkey", L"", WS_TABSTOP, x, y, w, h, id); setBg(c, bg);
@@ -303,13 +690,48 @@ static void startRecording(HWND c) { if (Recorder* r = rec(c)) { SetFocus(c); r-
 static void destroyChildren(HWND h) { std::vector<HWND> kids; for (HWND c = GetWindow(h, GW_CHILD); c; c = GetWindow(c, GW_HWNDNEXT)) kids.push_back(c); for (HWND c : kids) DestroyWindow(c); }
 
 // ---- main window -----------------------------------------------------------------------------
-enum { C_SEG = 200, C_HOTKEY, C_BEEP, C_AUTO, C_PAUSE, C_SMART, C_SITE, C_MARK, C_SPELL, C_RESTORE, C_LOGIN, C_UPDATE, C_LOGKEYS, C_EMOJI, C_EMOJIKEY, C_FEEDBACK, C_STYLE,
+enum { C_SEG = 200, C_HOTKEY, C_BEEP, C_AUTO, C_PAUSE, C_SMART, C_SITE, C_MARK, C_SPELL, C_RESTORE, C_LOGIN, C_UPDATE, C_LOGKEYS, C_EMOJI, C_EMOJIKEY, C_FEEDBACK, C_STYLE, C_APPEARANCE, C_PAGE,
        L_REFRESH = 300, L_OPEN, L_CLEAR, A_LINK = 400, O_BACK = 500, O_NEXT, O_REC, O_BEEP, O_EMOJI, O_EMOJIKEY, O_EDIT = 520 };
 static const UINT WM_REBUILD = WM_APP + 20;
-static HWND _win, _seg, _hint, _logWin, _logList, _logSummary, _logGrid, _aboutWin, _onbWin, _ackWin, _tooltip;
+static const UINT WM_PAGE = WM_APP + 21;
+static const int PAGE_COUNT = 4;
+static int _page = 0;
+static const wchar_t* PAGE_LABELS[PAGE_COUNT] = {L"Chung", L"Tự động", L"Emoji", L"Khác"};
+static HWND _win, _seg, _hint, _nav, _logWin, _logList, _logSummary, _logGrid, _aboutWin, _onbWin, _ackWin, _tooltip;
 static std::map<int, HWND> _ctl;
 struct Group { int top, bottom; }; static std::vector<Group> _groups; static std::vector<std::pair<int, std::wstring>> _titles;   // y, title
 static std::vector<int> _seps;
+
+static LRESULT CALLBACK navProc(HWND h, UINT m, WPARAM w, LPARAM l) {
+    switch (m) {
+    case WM_PAINT: {
+        PAINTSTRUCT ps; HDC dc = BeginPaint(h, &ps); RECT rc; GetClientRect(h, &rc);
+        HDC mem = CreateCompatibleDC(dc); HBITMAP bmp = CreateCompatibleBitmap(dc, rc.right, rc.bottom); HGDIOBJ old = SelectObject(mem, bmp);
+        HBRUSH bg = CreateSolidBrush(BG); FillRect(mem, &rc, bg); DeleteObject(bg);
+        Graphics g(mem); g.SetSmoothingMode(SmoothingModeAntiAlias);
+        roundRect(g, RectF(0.5f, 0.5f, (float)rc.right - 1, (float)rc.bottom - 1), 8, gp(TOGGLE_OFF), gp(BORDER));
+        float tabW = rc.right / (float)PAGE_COUNT; int selected = (int)GetWindowLongPtrW(h, GWLP_USERDATA);
+        for (int i = 0; i < PAGE_COUNT; ++i) {
+            RECT r = {(LONG)(i * tabW), 2, (LONG)((i + 1) * tabW), rc.bottom - 2};
+            if (i == selected) roundRect(g, RectF((float)r.left + 2, 2.0f, (float)(r.right - r.left) - 4, (float)rc.bottom - 4), 7, gp(ACCENT), Color(0, 0, 0, 0));
+            SelectObject(mem, fBodyBold); SetBkMode(mem, TRANSPARENT); SetTextColor(mem, i == selected ? RGB(255,255,255) : TEXT);
+            DrawTextW(mem, PAGE_LABELS[i], -1, &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        }
+        BitBlt(dc, 0, 0, rc.right, rc.bottom, mem, 0, 0, SRCCOPY); SelectObject(mem, old); DeleteObject(bmp); DeleteDC(mem); EndPaint(h, &ps); return 0;
+    }
+    case WM_LBUTTONUP: {
+        RECT rc; GetClientRect(h, &rc); int x = (int)GET_X_LPARAM(l); int page = std::clamp(x * PAGE_COUNT / std::max(1, (int)rc.right), 0, PAGE_COUNT - 1);
+        if (page != (int)GetWindowLongPtrW(h, GWLP_USERDATA)) {
+            SetWindowLongPtrW(h, GWLP_USERDATA, page); InvalidateRect(h, nullptr, FALSE);
+            PostMessageW(GetParent(h), WM_PAGE, page, 0);
+        }
+        return 0;
+    }
+    case WM_ERASEBKGND: return 1;
+    case WM_SETCURSOR: SetCursor(LoadCursor(nullptr, IDC_HAND)); return TRUE;
+    }
+    return DefWindowProcW(h, m, w, l);
+}
 
 static HWND child(const wchar_t* cls, const wchar_t* text, DWORD style, int x, int y, int w, int h, int id, HFONT f = nullptr) { return makeChild(_win, cls, text, style, x, y, w, h, id, f); }
 static void addTip(HWND tip, const wchar_t* text) {
@@ -333,16 +755,26 @@ static HWND row(const wchar_t* label, const wchar_t* tip, const wchar_t* cls, in
     _ctl[id] = c; _y += ROW; return c;
 }
 static HWND toggleRow(const wchar_t* label, const wchar_t* tip, int id, bool on) { HWND c = row(label, tip, L"VikeyToggle", id, 40, 23); setToggle(c, on); return c; }
-static HWND recorderRow(const wchar_t* label, const wchar_t* tip, const wchar_t* pref, bool modsOnly, int value, int id) {
-    rowLabel(label, tip);
-    HWND c = makeRecorder(_win, pref, modsOnly, value, W - MARGIN - 16 - 134, _y + (ROW - 28) / 2, 134, 28, id, GROUP);
-    _ctl[id] = c; _y += ROW; return c;
+static HWND shortcutRow(const wchar_t* label, const wchar_t* tip, const wchar_t* pref, bool allowModsOnly, int value, int id) {
+    if (_y != _groupTop) _seps.push_back(_y);
+    int ly = _y + 8;
+    child(L"STATIC", label, SS_LEFT | SS_NOPREFIX, MARGIN + 16, ly, 300, 20, 0, fBody);
+    HDC dc = GetDC(_win); int lw = textWidth(dc, fBody, label); ReleaseDC(_win, dc);
+    if (tip) { HWND t = child(L"VikeyTip", tip, 0, MARGIN + 16 + lw + 6, ly + 2, 16, 16, 0); addTip(t, tip); }
+    HWND c = child(L"VikeyShortcut", L"", WS_TABSTOP, MARGIN + 16, _y + 32, W - 2 * MARGIN - 32, 68, id);
+    int mods = (value == 0 && !allowModsOnly) ? 0 : (value & 0xF00);
+    int key = (value == 0 && !allowModsOnly) ? -1 : GET_SWITCH_KEY(value);
+    SetWindowLongPtrW(c, GWLP_USERDATA, (LONG_PTR)new ShortcutState{pref, allowModsOnly, mods, key, false, -1, nullptr});
+    _ctl[id] = c; _y += 108; return c;
+}
+static void startShortcutRecording(HWND c) {
+    if (ShortcutState* s = scState(c)) { SetFocus(c); s->recording = true; InvalidateRect(c, nullptr, FALSE); }
 }
 
 static void refreshEnabled() {
-    EnableWindow(_ctl[C_PAUSE], toggleOn(_ctl[C_AUTO]));
-    EnableWindow(_ctl[C_SITE], toggleOn(_ctl[C_SMART]));
-    EnableWindow(_ctl[C_RESTORE], toggleOn(_ctl[C_SPELL]));
+    if (_ctl.count(C_PAUSE)) EnableWindow(_ctl[C_PAUSE], toggleOn(_ctl[C_AUTO]));
+    if (_ctl.count(C_SITE)) EnableWindow(_ctl[C_SITE], toggleOn(_ctl[C_SMART]));
+    if (_ctl.count(C_RESTORE)) EnableWindow(_ctl[C_RESTORE], toggleOn(_ctl[C_SPELL]));
 }
 static void setHint() { if (_hint) SetWindowTextW(_hint, (L"Bấm " + hotkeyDisplay(currentHotkey()) + L" để chuyển").c_str()); }
 
@@ -368,34 +800,49 @@ static void buildMain() {
     // header
     _hint = child(L"STATIC", L"", SS_LEFT, MARGIN + 56, 43, 220, 18, 0, fSmall); setHint();   // under the wordmark's descender (the y was cut)
     _seg = child(L"VikeySegmented", L"", 0, W - MARGIN - 164, 22, 164, 30, C_SEG); languageChanged(core::language());
-    _y = 70;
-    int hk = currentHotkey();
-    beginGroup(nullptr);
-    recorderRow(L"Phím chuyển Anh/Việt", L"Bấm tổ hợp phím này để chuyển giữa tiếng Việt và tiếng Anh. Bấm vào ô để đặt phím khác.", L"SwitchKeyStatus", true, hk, C_HOTKEY);
+    _nav = child(L"VikeyNav", L"", 0, MARGIN, 64, W - 2 * MARGIN, 34, C_PAGE);
+    _page = std::clamp(_page, 0, PAGE_COUNT - 1);
+    SetWindowLongPtrW(_nav, GWLP_USERDATA, _page);
+    _y = 108;
+    int hk = currentHotkey(); int emojiKey = prefs::getInt(L"EmojiHotkey", 0); HWND emojiRec = nullptr;
+    if (_page == 0) {
+    beginGroup(L"Gõ tiếng Việt");
+    HWND style = row(L"Kiểu gõ", L"Chọn Telex hoặc một trong hai kiểu Telex đơn giản.", L"COMBOBOX", C_STYLE, 180, 200, CBS_DROPDOWNLIST | CBS_OWNERDRAWFIXED | CBS_HASSTRINGS | WS_TABSTOP);
+    for (const wchar_t* t : {L"Telex", L"Telex đơn giản 1", L"Telex đơn giản 2"}) SendMessageW(style, CB_ADDSTRING, 0, (LPARAM)t);
+    SendMessageW(style, CB_SETCURSEL, std::min(2, std::max(0, prefs::getInt(L"TelexStyle", 0))), 0);
+    SetWindowPos(style, nullptr, W - MARGIN - 16 - 180, _y - ROW + 4, 180, 200, SWP_NOZORDER);
+    HWND mark = row(L"Đặt dấu", L"Vị trí dấu thanh với oa, oe, uy: kiểu mới hoặc kiểu cũ.", L"COMBOBOX", C_MARK, 164, 200, CBS_DROPDOWNLIST | CBS_OWNERDRAWFIXED | CBS_HASSTRINGS | WS_TABSTOP);
+    SendMessageW(mark, CB_ADDSTRING, 0, (LPARAM)L"hoà, thuý"); SendMessageW(mark, CB_ADDSTRING, 0, (LPARAM)L"hòa, thúy"); SendMessageW(mark, CB_SETCURSEL, prefs::getInt(L"ModernOrthography", 1) ? 0 : 1, 0);
+    SetWindowPos(mark, nullptr, W - MARGIN - 16 - 164, _y - ROW + 4, 164, 200, SWP_NOZORDER);
+    toggleRow(L"Kiểm tra chính tả", L"Chỉ bỏ dấu khi từ đang gõ đúng quy tắc chính tả tiếng Việt.", C_SPELL, prefs::getInt(L"Spelling", 1) != 0);
+    toggleRow(L"Trả lại phím khi sai", L"Khi gõ xong một từ sai chính tả tiếng Việt, Vikey trả lại đúng các phím bạn đã gõ.", C_RESTORE, prefs::getInt(L"RestoreIfInvalidWord", 1) != 0);
+    endGroup();
+    beginGroup(L"Phím chuyển");
+    shortcutRow(L"Phím chuyển Anh/Việt", L"Chọn phím bổ trợ và phím chính, hoặc bấm vào ô Phím để ghi phím mới. Chọn \"Không (chỉ tổ hợp)\" nếu muốn dùng tổ hợp phím bổ trợ như Ctrl+Shift, hoặc chọn Win+Space để thay phím chuyển bộ gõ của Windows.", L"SwitchKeyStatus", true, hk, C_HOTKEY);
     toggleRow(L"Âm báo khi chuyển", L"Phát một âm ngắn mỗi lần bạn bấm phím chuyển Anh/Việt: lên giọng khi sang tiếng Việt, xuống giọng khi sang tiếng Anh.", C_BEEP, HAS_BEEP(hk) != 0);
     endGroup();
+    }
+    if (_page == 1) {
     beginGroup(L"Tự chuyển");
     toggleRow(L"Tự chuyển Anh/Việt", L"Gõ một từ tiếng Anh khi đang ở tiếng Việt (hoặc ngược lại), Vikey tự sửa từ đó và chuyển chế độ. Bấm Xoá ngay sau đó để hoàn tác.", C_AUTO, prefs::getInt(L"AutoSwitchByTyping", 1) != 0);
     toggleRow(L"Tạm dừng 5 giây", L"Khi bạn tự bấm chuyển Anh/Việt, Vikey không tự chuyển trong 5 giây, để giữ đúng lựa chọn của bạn.", C_PAUSE, prefs::getInt(L"PauseAutoAfterManual", 1) != 0);
     toggleRow(L"Nhớ theo ứng dụng", L"Vikey nhớ bạn dùng tiếng Anh hay tiếng Việt ở mỗi ứng dụng và tự chuyển lại khi bạn quay về ứng dụng đó.", C_SMART, prefs::getInt(L"UseSmartSwitchKey", 1) != 0);
     toggleRow(L"Nhớ theo trang web", L"Trong Chrome, Edge, Brave, Vivaldi, Opera, Firefox: nhớ tiếng Anh hay tiếng Việt cho từng trang web. Chỉ đọc địa chỉ tab đang mở, ngay trên máy bạn.", C_SITE, prefs::getInt(L"SmartSwitchPerSite", 1) != 0);
     endGroup();
-    beginGroup(L"Gõ tiếng Việt");
-    HWND style = row(L"Kiểu gõ", L"Telex: [ ra ơ, ] ra ư, w ra ư. Telex đơn giản 1: [ ] là dấu ngoặc, w đứng riêng vẫn là w. Telex đơn giản 2: [ ] là dấu ngoặc, w vẫn ra ư. Cả ba kiểu đều gõ uw, ow, aw ra ư, ơ, ă.", L"COMBOBOX", C_STYLE, 150, 200, CBS_DROPDOWNLIST | WS_TABSTOP);
-    for (const wchar_t* t : {L"Telex", L"Telex đơn giản 1", L"Telex đơn giản 2"}) SendMessageW(style, CB_ADDSTRING, 0, (LPARAM)t);
-    SendMessageW(style, CB_SETCURSEL, std::min(2, std::max(0, prefs::getInt(L"TelexStyle", 0))), 0);
-    SetWindowPos(style, nullptr, W - MARGIN - 16 - 150, _y - ROW + 4, 150, 200, SWP_NOZORDER);
-    HWND mark = row(L"Đặt dấu", L"Vị trí dấu thanh với oa, oe, uy: kiểu mới (hoà, thuý) hoặc kiểu cũ (hòa, thúy).", L"COMBOBOX", C_MARK, 130, 200, CBS_DROPDOWNLIST | WS_TABSTOP);
-    SendMessageW(mark, CB_ADDSTRING, 0, (LPARAM)L"hoà, thuý"); SendMessageW(mark, CB_ADDSTRING, 0, (LPARAM)L"hòa, thúy"); SendMessageW(mark, CB_SETCURSEL, prefs::getInt(L"ModernOrthography", 1) ? 0 : 1, 0);
-    SetWindowPos(mark, nullptr, W - MARGIN - 16 - 130, _y - ROW + 4, 130, 200, SWP_NOZORDER);
-    toggleRow(L"Kiểm tra chính tả", L"Chỉ bỏ dấu khi từ đang gõ đúng quy tắc chính tả tiếng Việt.", C_SPELL, prefs::getInt(L"Spelling", 1) != 0);
-    toggleRow(L"Trả lại phím khi sai", L"Khi gõ xong một từ sai chính tả tiếng Việt, Vikey trả lại đúng các phím bạn đã gõ.", C_RESTORE, prefs::getInt(L"RestoreIfInvalidWord", 1) != 0);
-    endGroup();
-    beginGroup(nullptr);
+    }
+    if (_page == 2) {
     bool emojiOn = prefs::getInt(L"EmojiPicker", 0) != 0;
-    toggleRow(L"Bảng emoji", L"Bấm phím tắt để mở bảng emoji ở giữa màn hình. Tìm bằng tiếng Việt hoặc tiếng Anh, gõ Telex vẫn tìm được: \"ngựa\", \"horse\" đều ra 🐴. Enter để chèn, Esc để đóng.", C_EMOJI, emojiOn);
-    HWND emojiRec = nullptr; int emojiKey = prefs::getInt(L"EmojiHotkey", 0);
-    if (emojiOn) emojiRec = recorderRow(L"Phím mở bảng emoji", L"Một phím kèm Ctrl, Alt hoặc Win, ví dụ Ctrl+Alt+E. Bấm vào ô để đặt phím khác.", L"EmojiHotkey", false, emojiKey, C_EMOJIKEY);
+    beginGroup(L"Bảng emoji");
+    toggleRow(L"Bật bảng emoji", L"Tìm bằng tiếng Việt, tiếng Anh hoặc Telex; nhấn Enter hoặc bấm emoji để chèn vào ô đang nhập.", C_EMOJI, emojiOn);
+    if (emojiOn) emojiRec = shortcutRow(L"Phím mở bảng", L"Chọn phím bổ trợ (cần Ctrl, Alt hoặc Win) và phím chính, hoặc bấm vào ô Phím để ghi phím mới.", L"EmojiHotkey", false, emojiKey, C_EMOJIKEY);
+    endGroup();
+    }
+    if (_page == 3) {
+    beginGroup(L"Giao diện");
+    HWND appearance = row(L"Chủ đề", L"Mặc định Vikey theo chế độ ứng dụng sáng/tối của Windows.", L"COMBOBOX", C_APPEARANCE, 132, 200, CBS_DROPDOWNLIST | CBS_OWNERDRAWFIXED | CBS_HASSTRINGS | WS_TABSTOP);
+    for (const wchar_t* t : {L"Theo Windows", L"Sáng", L"Tối"}) SendMessageW(appearance, CB_ADDSTRING, 0, (LPARAM)t);
+    SendMessageW(appearance, CB_SETCURSEL, std::clamp(prefs::getInt(DARK_MODE, -1) + 1, 0, 2), 0);
+    SetWindowPos(appearance, nullptr, W - MARGIN - 16 - 132, _y - ROW + 4, 132, 200, SWP_NOZORDER);
     endGroup();
     beginGroup(nullptr);
     toggleRow(L"Mở Vikey khi đăng nhập", L"Tự mở Vikey mỗi khi bạn đăng nhập vào Windows.", C_LOGIN, prefs::launchAtLogin());
@@ -403,24 +850,28 @@ static void buildMain() {
     HWND fb = row(L"Góp ý", L"Báo lỗi hoặc góp ý cho Vikey: mở trang vikey.app/feedback trong trình duyệt.", L"VikeyButton", C_FEEDBACK, 120, 26, WS_TABSTOP);
     SetWindowTextW(fb, L"Gửi góp ý…"); setBg(fb, GROUP);
     endGroup();
+    }
     refreshEnabled();
     RECT wr = {0, 0, W, _y}; AdjustWindowRectEx(&wr, WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX, FALSE, 0);
     SetWindowPos(_win, nullptr, 0, 0, wr.right - wr.left, wr.bottom - wr.top, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
     RedrawWindow(_win, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW);   // a rebuilt combo box kept stale pixels
-    if (emojiRec && emojiKey == 0 && GetForegroundWindow() == _win) startRecording(emojiRec);   // first time the feature is turned on here: record right away
+    if (emojiRec && emojiKey == 0 && GetForegroundWindow() == _win) startShortcutRecording(emojiRec);   // first time the feature is turned on here: record right away
 }
 
 static LRESULT CALLBACK mainProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
     case WM_PAINT: paintMain(h); return 0;
-    case WM_CTLCOLORSTATIC: { static HBRUSH bgBrush = CreateSolidBrush(BG), groupBrush = CreateSolidBrush(GROUP); SetBkMode((HDC)wp, TRANSPARENT); HWND c = (HWND)lp; SetTextColor((HDC)wp, c == _hint ? SECONDARY : TEXT); return (LRESULT)(c == _hint ? bgBrush : groupBrush); }
+    case WM_DRAWITEM: { DRAWITEMSTRUCT* dis = (DRAWITEMSTRUCT*)lp; if (dis && dis->CtlType == ODT_COMBOBOX) { drawComboItem(dis); return TRUE; } break; }
+    case WM_CTLCOLORSTATIC: case WM_CTLCOLOREDIT: case WM_CTLCOLORLISTBOX: case WM_CTLCOLORBTN: case WM_CTLCOLORSCROLLBAR: {
+        HWND c = (HWND)lp; bool headerHint = msg == WM_CTLCOLORSTATIC && c == _hint; COLORREF bg = (c == _win || c == _hint) ? BG : GROUP;
+        SetBkMode((HDC)wp, TRANSPARENT); SetTextColor((HDC)wp, headerHint ? SECONDARY : TEXT); SetBkColor((HDC)wp, bg); return (LRESULT)brushFor(bg); }
     case WM_COMMAND: {
         int id = LOWORD(wp); HWND c = (HWND)lp;
         auto flag = [&](const wchar_t* pref) { prefs::setInt(pref, toggleOn(c)); core::reloadSettings(); refreshEnabled(); };
         switch (id) {
         case C_SEG: core::setLanguageByUser(GetWindowLongPtrW(_seg, GWLP_USERDATA) == 0 ? 1 : 0); break;
-        case C_HOTKEY: setHint(); break;
-        case C_BEEP: { int hk = (currentHotkey() & ~0x8000) | (toggleOn(c) ? 0x8000 : 0); prefs::setInt(L"SwitchKeyStatus", hk); if (Recorder* r = rec(_ctl[C_HOTKEY])) r->value = hk; core::reloadSettings(); afterHotkeyChange(); break; }
+        case C_HOTKEY: afterHotkeyChange(false); break;
+        case C_BEEP: { int hk = (currentHotkey() & ~0x8000) | (toggleOn(c) ? 0x8000 : 0); prefs::setInt(L"SwitchKeyStatus", hk); core::reloadSettings(); afterHotkeyChange(false); break; }
         case C_AUTO: flag(L"AutoSwitchByTyping"); break;
         case C_PAUSE: flag(L"PauseAutoAfterManual"); break;
         case C_SMART: flag(L"UseSmartSwitchKey"); break;
@@ -430,11 +881,14 @@ static LRESULT CALLBACK mainProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         case C_SPELL: flag(L"Spelling"); break;
         case C_RESTORE: flag(L"RestoreIfInvalidWord"); break;
         case C_EMOJI: prefs::setInt(L"EmojiPicker", toggleOn(c)); core::reloadSettings(); emoji::settingsChanged(); afterHotkeyChange(); break;
+        case C_EMOJIKEY: afterHotkeyChange(false); break;
+        case C_APPEARANCE: if (HIWORD(wp) == CBN_SELCHANGE) { prefs::setInt(DARK_MODE, (int)SendMessageW(c, CB_GETCURSEL, 0, 0) - 1); themeChanged(); } break;
         case C_LOGIN: prefs::setLaunchAtLogin(toggleOn(c)); setToggle(c, prefs::launchAtLogin()); break;
         case C_UPDATE: prefs::setInt(L"AutoUpdate", toggleOn(c)); break;
         case C_FEEDBACK: ShellExecuteW(nullptr, L"open", L"https://vikey.app/feedback?platform=windows&v=" VIKEY_VERSION_W, nullptr, nullptr, SW_SHOWNORMAL); break;
         }
         return 0; }
+    case WM_PAGE: _page = std::clamp((int)wp, 0, PAGE_COUNT - 1); buildMain(); centerOnMouseScreen(h); return 0;
     case WM_REBUILD: buildMain(); return 0;
     case WM_CLOSE: DestroyWindow(h); return 0;
     case WM_DESTROY: if (_tooltip) DestroyWindow(_tooltip); _win = nullptr; _seg = nullptr; _hint = nullptr; _tooltip = nullptr; _ctl.clear(); _groups.clear(); _titles.clear(); _seps.clear(); return 0;
@@ -446,6 +900,16 @@ void languageChanged(int lang) {
     if (_seg) { SetWindowLongPtrW(_seg, GWLP_USERDATA, lang ? 0 : 1); InvalidateRect(_seg, nullptr, FALSE); }
     if (_onbWin) InvalidateRect(_onbWin, nullptr, FALSE);
     emoji::languageChanged(lang);
+}
+
+void themeChanged() {
+    refreshPalette();
+    for (HWND h : {_win, _onbWin, _ackWin, _aboutWin, _logWin}) if (h) {
+        if (h == _win) PostMessageW(h, WM_REBUILD, 0, 0);
+        RedrawWindow(h, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW);
+        BOOL useDarkTitlebar = darkMode(); DwmSetWindowAttribute(h, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, &useDarkTitlebar, sizeof(useDarkTitlebar));
+    }
+    emoji::themeChanged();
 }
 
 void showSettings(HINSTANCE inst, bool firstRun) {
@@ -572,7 +1036,7 @@ static void paintOnboarding(HWND h) {
         static const wchar_t* T[4][4][2] = {{{L"aa", L"â"}, {L"aw", L"ă"}, {L"ee", L"ê"}, {L"oo", L"ô"}}, {{L"ow", L"ơ"}, {L"uw", L"ư"}, {L"dd", L"đ"}, {L"w", L"ư"}},
                                             {{L"s", L"sắc"}, {L"f", L"huyền"}, {L"r", L"hỏi"}, {L"x", L"ngã"}}, {{L"j", L"nặng"}, {L"z", L"xoá dấu"}, {nullptr, nullptr}, {nullptr, nullptr}}};
         int top = _oy[2], rowH = 32, boxH = 14 * 2 + 4 * rowH - 8;
-        roundRect(g, RectF((float)OP, (float)top, (float)OCW, (float)boxH), 10, gp(RGB(242, 242, 244)), Color(0, 0, 0, 0));
+        roundRect(g, RectF((float)OP, (float)top, (float)OCW, (float)boxH), 10, gp(BG), gp(BORDER));
         int colW = (OCW - 28) / 4;
         for (int r = 0; r < 4; r++) for (int c = 0; c < 4; c++) {
             if (!T[r][c][0]) continue;
@@ -638,7 +1102,7 @@ static LRESULT CALLBACK onbProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         }
         return 0; }
     case WM_REBUILD: buildOnboarding(); return 0;
-    case WM_CTLCOLOREDIT: return (LRESULT)GetStockObject(WHITE_BRUSH);
+    case WM_CTLCOLOREDIT: SetTextColor((HDC)wp, TEXT); SetBkColor((HDC)wp, GROUP); return (LRESULT)brushFor(GROUP);
     case WM_CLOSE: DestroyWindow(h); return 0;
     case WM_DESTROY: _onbWin = nullptr; return 0;
     }
@@ -658,8 +1122,8 @@ void showOnboarding(HINSTANCE inst) {
     prefs::setInt(L"FirstRunDone", 1);
 }
 /// A hotkey or the emoji setting changed in one window: the other one shows it too.
-static void afterHotkeyChange() {
-    if (_win) { setHint(); PostMessageW(_win, WM_REBUILD, 0, 0); }
+static void afterHotkeyChange(bool rebuildMain) {
+    if (_win) { setHint(); if (rebuildMain) PostMessageW(_win, WM_REBUILD, 0, 0); }
     if (_onbWin && _step != S_PRACTICE) PostMessageW(_onbWin, WM_REBUILD, 0, 0); else if (_onbWin) InvalidateRect(_onbWin, nullptr, FALSE);
 }
 
@@ -870,7 +1334,7 @@ static LRESULT CALLBACK logProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             if (cd->nmcd.dwDrawStage == CDDS_PREPAINT) return CDRF_NOTIFYITEMDRAW;
             if (cd->nmcd.dwDrawStage == CDDS_ITEMPREPAINT) { cd->clrText = cd->nmcd.lItemlParam == 1 ? RGB(255, 149, 0) : (cd->nmcd.lItemlParam == 2 ? ACCENT : TEXT); return CDRF_NEWFONT; } }
         return 0; }
-    case WM_CTLCOLORSTATIC: SetBkMode((HDC)wp, TRANSPARENT); SetTextColor((HDC)wp, (HWND)lp == _logSummary ? TEXT : SECONDARY); return (LRESULT)GetStockObject(WHITE_BRUSH);
+    case WM_CTLCOLORSTATIC: SetBkMode((HDC)wp, TRANSPARENT); SetTextColor((HDC)wp, (HWND)lp == _logSummary ? TEXT : SECONDARY); SetBkColor((HDC)wp, GROUP); return (LRESULT)brushFor(GROUP);
     case WM_SIZE: { RECT r; GetClientRect(h, &r); MoveWindow(_logList, 20, 390, r.right - 40, r.bottom - 390 - 56, TRUE); for (int id : {L_REFRESH, L_OPEN, L_CLEAR}) { HWND b = GetDlgItem(h, id); RECT br; GetWindowRect(b, &br); MapWindowPoints(nullptr, h, (POINT*)&br, 2); MoveWindow(b, id == L_CLEAR ? r.right - 20 - 100 : br.left, r.bottom - 44, id == L_CLEAR ? 100 : br.right - br.left, 28, TRUE); } return 0; }
     case WM_CLOSE: DestroyWindow(h); return 0;
     case WM_DESTROY: _logWin = nullptr; return 0;
