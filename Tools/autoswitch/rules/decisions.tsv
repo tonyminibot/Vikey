@@ -37,3 +37,4 @@ D65	test	iOS/Tests/KeyboardPerformanceTests.swift::testSpaceAfterAFinishedWord ;
 D66	test	iOS/Tests/KeyboardPerformanceTests.swift::testVietnameseMidWordTouchFollowsTheSentence ; iOS/Tests/SuggestLMTests.swift::testNextKeysFollowTheSentence ; iOS/Tests/KeyboardPerformanceTests.swift::testTouchTimeVietnamese
 D67	test	iOS/MemoryTests/KeyboardMemoryTests.swift::testAClosedKeyboardLeavesNothingBehind ; iOS/MemoryTests/KeyboardMemoryTests.swift::testOpeningAgainAndAgainDoesNotGrow ; iOS/MemoryTests/KeyboardMemoryTests.swift::testALongSessionStaysUnder40MB
 D68	test	iOS/Tests/EmojiUsageTests.swift::testSameListAsApple ; iOS/Tests/EmojiUsageTests.swift::testSameListAsAppleAfterThousandsOfPicks ; iOS/Tests/EmojiUsageTests.swift::testKeyboardSavesPicksInItsOwnDefaults ; iOS/Tests/EmojiUsageTests.swift::testOldScoresCarryOver
+D69	open	the Bàn phím tab and the per-keyboard switch: Mac app-level (VikeyCore.mm, MainView), needs a live Mac test
