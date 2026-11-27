@@ -8,4 +8,6 @@ void showAbout(HINSTANCE inst);
 void showAcknowledgements(HINSTANCE inst);
 void showTypingLog(HINSTANCE inst);
 void languageChanged(int lang);
+void themeChanged();
+bool isDarkMode();
 }}

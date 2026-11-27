@@ -31,7 +31,7 @@ void setEmojiPickerOpen(bool open, HWND picker);
 /// Forget the word being typed (the cursor moved to another field without a click).
 void resetTyping();
 /// Types text into the focused app (KEYEVENTF_UNICODE; surrogate pairs for astral emoji).
-void insertText(const std::wstring& text);
+void insertText(const std::wstring& text, HWND targetFocus = nullptr);
 
 // Typing log
 std::wstring typingLogPath();
