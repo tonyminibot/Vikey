@@ -626,6 +626,19 @@ Uint32 getCharacterCode(const Uint32& data) {
     return 0;
 }
 
+/** The word on screen, for gõ tắt (D68): only when it is the whole current word (no space or punctuation after it). */
+int vTypingWordText(char32_t* out, const int& maxOut) {
+    if (_index == 0 || _spaceCount > 0 || !_specialChar.empty() || !_longWordHelper.empty() || _index >= maxOut) return 0;
+    int n = 0;
+    for (int x = 0; x < _index; x++) {
+        Uint32 c = getCharacterCode(TypingWord[x]);
+        Uint32 ch = (c & CHAR_CODE_MASK) ? (c & 0xFFFF) : keyCodeToCharacter(c);
+        if (ch == 0) return 0;
+        out[n++] = (char32_t)ch;
+    }
+    return n;
+}
+
 void findAndCalculateVowel(const bool& forGrammar) {
     vowelCount = 0;
     VSI = VEI = 0;

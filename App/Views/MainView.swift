@@ -10,6 +10,10 @@ struct MainView: View {
     @AppStorage(PrefKey.restoreIfInvalid) private var restore = 1
     @AppStorage(PrefKey.teencode) private var teencode = 1
     @AppStorage(PrefKey.telexStyle) private var telexStyle = 0
+    @AppStorage(PrefKey.useMacro) private var useMacro = 1
+    @AppStorage(PrefKey.macroInEnglish) private var macroInEnglish = 1
+    @AppStorage(PrefKey.autoCapsMacro) private var autoCapsMacro = 0
+    @State private var macroEditor = false
     @AppStorage(PrefKey.mainTab) private var tab = "general"
     @AppStorage(PrefKey.autoSwitch) private var autoSwitch = 1
     @AppStorage(PrefKey.smartSwitch) private var smartSwitch = 1
@@ -37,6 +41,7 @@ struct MainView: View {
                 Windows.main.fitToContent(height: newHeight)
             }
         }
+        .sheet(isPresented: $macroEditor) { MacroEditor() }
         .alert("Vikey chưa được phép đọc địa chỉ trang web", isPresented: $browserDenied) {
             Button("Mở Cài đặt hệ thống") {
                 NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")!)
@@ -54,7 +59,9 @@ struct MainView: View {
             Form {
                 switch tab {
                 case "auto": Section { autoRows }
-                case "viet": Section { vietRows }
+                case "viet":
+                    Section { vietRows }
+                    Section { macroRows }
                 case "emoji": Section { emojiRows }
                 case "excluded": Section { excludedRows }
                 default:
@@ -164,6 +171,24 @@ struct MainView: View {
                 .disabled(spelling == 0)
                 Toggle(isOn: flag($teencode)) {
                     Tip("Chính tả teencode", "Giữ các từ kiểu chat như zui zẻ, zậy, dzô, gòy, thík, bíe thay vì trả lại phím. Chỉ những từ teencode quen thuộc, nên từ tiếng Anh như zero, look vẫn giữ nguyên.")
+                }
+    }
+    @ViewBuilder private var macroRows: some View {
+                Toggle(isOn: flag($useMacro)) {
+                    Tip("Gõ tắt", "Gõ một từ viết tắt rồi bấm Space (hoặc Enter, Tab, dấu , . ;), Vikey đổi thành chữ đầy đủ. Ví dụ tks thành cảm ơn.")
+                }
+                if useMacro != 0 {
+                    Toggle(isOn: flag($macroInEnglish)) {
+                        Tip("Gõ tắt cả khi gõ tiếng Anh", "Vẫn đổi chữ gõ tắt khi Vikey đang ở chế độ tiếng Anh.")
+                    }
+                    Toggle(isOn: flag($autoCapsMacro)) {
+                        Tip("Tự viết hoa theo chữ gõ", "Gõ Tks ra Cảm ơn, gõ TKS ra CẢM ƠN, dù bảng chỉ có tks.")
+                    }
+                    LabeledContent {
+                        Button("Soạn bảng…") { macroEditor = true }
+                    } label: {
+                        Tip("Bảng gõ tắt", "Thêm, xoá, nhập hay xuất các từ gõ tắt. Nhập được tệp gõ tắt của UniKey và OpenKey.")
+                    }
                 }
     }
     @ViewBuilder private var emojiRows: some View {

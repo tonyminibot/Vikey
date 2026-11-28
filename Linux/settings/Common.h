@@ -31,6 +31,7 @@ void loadCss();
 void buildMain(GtkApplication* app);
 void buildGuide(GtkApplication* app, bool thenMain);
 void buildEmoji(GtkApplication* app);
+void buildMacros(GtkApplication* app);        // --macros: the gõ tắt table (MacroEditor.cpp)
 void presentAcknowledgements(GtkWidget* parent);
 void buildAcknowledgements(GtkApplication* app);
 void checkUpdate(GtkApplication* app, bool quiet);

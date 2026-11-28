@@ -16,7 +16,7 @@ endif()
 set(ROOT ${CMAKE_CURRENT_SOURCE_DIR}/..)
 set(ENGINE ${ROOT}/Engine)
 set(AS ${ROOT}/Tools/autoswitch)
-set(ENGINE_SRC ${ENGINE}/Engine.cpp ${ENGINE}/Vietnamese.cpp ${ENGINE}/SmartSwitchKey.cpp)
+set(ENGINE_SRC ${ENGINE}/Engine.cpp ${ENGINE}/Vietnamese.cpp ${ENGINE}/SmartSwitchKey.cpp ${ENGINE}/Macro.cpp)
 # One version for every platform: project.yml's MARKETING_VERSION (also the package version below).
 if(NOT VIKEY_VERSION)
   file(STRINGS "${ROOT}/project.yml" _mv REGEX "MARKETING_VERSION: \"")
@@ -44,6 +44,8 @@ vikey_tool(drvlazy   ${AS}/driver/drvlazy.cpp    ${AS}/driver vikey_engine)
 vikey_tool(bench     ${AS}/driver/bench.cpp      ${AS}/driver vikey_engine)
 vikey_tool(undo_test ${AS}/driver/undo_test.cpp  ${AS}/driver vikey_engine)
 vikey_tool(touchsim  ${AS}/touch/touchsim.cpp    ${AS}/touch  vikey_engine)
+add_executable(macro_test Tests/macro_test.cpp)   # gõ tắt (D68): the table, file format, auto caps
+target_link_libraries(macro_test PRIVATE vikey_engine)
 add_executable(surrounding_test Tests/surrounding_test.cpp)   # the IBus engine's delete limit (#32), no IBus needed
 target_include_directories(surrounding_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/ibus)
 

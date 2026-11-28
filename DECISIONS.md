@@ -5,6 +5,23 @@ Each entry records what was asked, what was decided, and its status. Newest firs
 
 Status values: **Shipped** (in a build Tony has), **Agreed** (decided, not built yet), **Rejected**.
 
+## 68. Gõ tắt comes back, on macOS and Linux
+
+**Status:** Agreed (built), 2026-11-19 (asked for in this session: "thêm tính năng gõ tắt cho bản macos và linux"). It reverses the "gõ tắt: remove" cut of D10; Windows, iOS and Android stay without it.
+
+**User story.** As someone who types the same phrases often, I want to type "tks" and get "cảm ơn", in Vietnamese or English mode.
+
+**Decision.**
+- A table of abbreviation → expansion in a text file, one `abbreviation:expansion` per line: macOS `~/Library/Application Support/Vikey/macros.txt`, Linux `~/.config/vikey/macros.txt`. It is the UniKey/OpenKey macro export format, so those files import as they are; the OpenKey binary `macroData` that D10's migration copies is read once if there is no file yet.
+- It lives outside the Telex engine (`Engine/Macro.cpp`), so both platforms share it and a macro can't change how Telex works. At the key that ends a word (Space, Enter, Tab, `,` `.` `;`) the platform asks the engine for the word on screen (`vTypingWordText`; in English mode `Macro::englishType` follows the keys), and if it is an abbreviation it deletes the word and types the expansion and then the key. The engine never sees the expansion: it starts a new word, as after a click.
+- An abbreviation is letters and digits, 1 to 32 characters. An exact entry wins; with "Tự viết hoa theo chữ gõ" (off by default) `Tks` gives `Cảm ơn` and `TKS` gives `CẢM ƠN` from `tks`.
+- Settings (same keys as OpenKey): `UseMacro` (on), `UseMacroInEnglishMode` (on), `vAutoCapsMacro` (off). macOS: rows in the "Gõ tiếng Việt" tab and a table sheet. Linux: a "Gõ tắt" group and `vikey-settings --macros`; saving bumps `MacroRevision` in settings.json so the IBus engine reloads the file.
+- An empty table costs nothing: no lookup happens.
+
+**Not done.** Expanding when a macro is typed after punctuation without a space ("ok,tks"); multi-line expansions; Backspace after an expansion goes back into the expansion as plain text, not into the abbreviation.
+
+---
+
 ## 67. Each opening of the keyboard frees its views; the keyboard's memory is tested (iOS)
 
 **Status:** Agreed (built), 2026-11-18 (Tony: "vikey keyboard still crash, I see this just now"; "Pls add more tests to ensure vikey doesn't go pass 40MB mem usage ever").
@@ -853,7 +870,7 @@ He approved Otto's suggested cuts and added: "gõ tắt: remove".
   - Quick Telex (cc → ch…) and quick start/end consonants.
   - Z/F/W/J consonants.
   - Auto-capitalizing the first letter.
-  - Macros (gõ tắt).
+  - Macros (gõ tắt; they came back on macOS and Linux in D68).
   - The Ctrl key turning spell check off, and ⌘ turning the app off.
   - Send-keys-one-by-one mode, and the alternative Chromium fix.
   - The update checker (it pointed to upstream).

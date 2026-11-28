@@ -36,3 +36,4 @@ D64	test	iOS/Tests/KeyboardPerformanceTests.swift::testOpeningReadsNoModelFiles 
 D65	test	iOS/Tests/KeyboardPerformanceTests.swift::testSpaceAfterAFinishedWord ; iOS/Tests/KeyboardPerformanceTests.swift::testEnglishMidWordTouchFollowsTheSentence ; iOS/Tests/KeyboardPerformanceTests.swift::testTouchTimeEnglish
 D66	test	iOS/Tests/KeyboardPerformanceTests.swift::testVietnameseMidWordTouchFollowsTheSentence ; iOS/Tests/SuggestLMTests.swift::testNextKeysFollowTheSentence ; iOS/Tests/KeyboardPerformanceTests.swift::testTouchTimeVietnamese
 D67	test	iOS/MemoryTests/KeyboardMemoryTests.swift::testAClosedKeyboardLeavesNothingBehind ; iOS/MemoryTests/KeyboardMemoryTests.swift::testOpeningAgainAndAgainDoesNotGrow ; iOS/MemoryTests/KeyboardMemoryTests.swift::testALongSessionStaysUnder40MB
+D68	test	Linux/Tests/macro_test.cpp::screenWord

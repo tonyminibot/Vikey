@@ -1,8 +1,8 @@
 pkg_check_modules(ADW IMPORTED_TARGET libadwaita-1 gtk4 fontconfig)
 if(ADW_FOUND)
-  add_executable(vikey-settings Settings.cpp Guide.cpp Emoji.cpp CrashReport.cpp ../ibus/Prefs.cpp ../ibus/Crash.cpp)
+  add_executable(vikey-settings Settings.cpp Guide.cpp Emoji.cpp MacroEditor.cpp CrashReport.cpp ../ibus/Prefs.cpp ../ibus/Crash.cpp)
   target_compile_definitions(vikey-settings PRIVATE VIKEY_VERSION="${VIKEY_VERSION}" VIKEY_DATADIR="${CMAKE_INSTALL_FULL_DATADIR}/vikey")
-  target_link_libraries(vikey-settings PRIVATE PkgConfig::ADW)
+  target_link_libraries(vikey-settings PRIVATE vikey_engine PkgConfig::ADW)   # Engine/Macro.cpp: the same table code as the IBus engine
   pkg_check_modules(GTKX11 IMPORTED_TARGET gtk4-x11 x11)
   if(GTKX11_FOUND)   # the emoji picker places itself in the middle of the screen (X11; Wayland has no window positions)
     target_compile_definitions(vikey-settings PRIVATE VIKEY_HAVE_X11)

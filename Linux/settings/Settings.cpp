@@ -129,6 +129,8 @@ static void setHint() { gtk_label_set_text(GTK_LABEL(_hint), ("Bấm " + hotkeyD
 static void refreshEnabled() {
     gtk_widget_set_sensitive(_sw["PauseAutoAfterManual"], gtk_switch_get_active(GTK_SWITCH(_sw["AutoSwitchByTyping"])));
     gtk_widget_set_sensitive(_sw["RestoreIfInvalidWord"], gtk_switch_get_active(GTK_SWITCH(_sw["Spelling"])));
+    gtk_widget_set_sensitive(_sw["UseMacroInEnglishMode"], gtk_switch_get_active(GTK_SWITCH(_sw["UseMacro"])));
+    gtk_widget_set_sensitive(_sw["vAutoCapsMacro"], gtk_switch_get_active(GTK_SWITCH(_sw["UseMacro"])));
     gtk_widget_set_visible(_emojiRow, gtk_switch_get_active(GTK_SWITCH(_sw["EmojiPicker"])));
 }
 static void syncSeg() { int vi = prefs::getInt("InputMethod", 1); gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(_seg[0]), vi); gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(_seg[1]), !vi); }
@@ -207,6 +209,14 @@ void buildMain(GtkApplication* app) {
     g_signal_connect(dd, "notify::selected", G_CALLBACK(onMark), nullptr); adw_action_row_add_suffix(ADW_ACTION_ROW(markRow), dd);
     switchRow(g3, "Kiểm tra chính tả", "Chỉ bỏ dấu khi từ đang gõ đúng quy tắc chính tả tiếng Việt.", "Spelling", 1);
     switchRow(g3, "Trả lại phím khi sai", "Khi gõ xong một từ sai chính tả tiếng Việt, Vikey trả lại đúng các phím bạn đã gõ.", "RestoreIfInvalidWord", 1);
+    // gõ tắt (D68): the table itself opens in its own window (--macros)
+    GtkWidget* gm = group(page, "Gõ tắt");
+    switchRow(gm, "Gõ tắt", "Gõ một từ viết tắt rồi bấm Space (hoặc Enter, Tab, dấu , . ;), Vikey đổi thành chữ đầy đủ. Ví dụ tks thành cảm ơn.", "UseMacro", 1);
+    switchRow(gm, "Gõ tắt cả khi gõ tiếng Anh", "Vẫn đổi chữ gõ tắt khi Vikey đang ở chế độ tiếng Anh.", "UseMacroInEnglishMode", 1);
+    switchRow(gm, "Tự viết hoa theo chữ gõ", "Gõ Tks ra Cảm ơn, gõ TKS ra CẢM ƠN, dù bảng chỉ có tks.", "vAutoCapsMacro", 0);
+    GtkWidget* mr = row(gm, "Bảng gõ tắt", "Thêm, xoá, nhập hay xuất các từ gõ tắt. Nhập được tệp gõ tắt của UniKey và OpenKey.");
+    GtkWidget* mb = gtk_button_new_with_label("Soạn bảng…"); gtk_widget_set_valign(mb, GTK_ALIGN_CENTER);
+    g_signal_connect(mb, "clicked", G_CALLBACK(+[](GtkButton*, gpointer) { spawnSelf("--macros"); }), nullptr); adw_action_row_add_suffix(ADW_ACTION_ROW(mr), mb);
     // emoji picker
     GtkWidget* g4 = group(page, nullptr);
     switchRow(g4, "Bảng emoji", "Bấm phím tắt để mở bảng emoji ở giữa màn hình. Tìm bằng tiếng Việt hoặc tiếng Anh, gõ Telex vẫn tìm được: \"ngựa\", \"horse\" đều ra 🐴. Enter để chèn, Esc để đóng.", "EmojiPicker", 0);
@@ -412,6 +422,7 @@ static void onActivate(GtkApplication* app, gpointer) {
     else if (_mode == "--acknowledgements") buildAcknowledgements(app);
     else if (_mode == "--guide") buildGuide(app, false);
     else if (_mode == "--emoji") buildEmoji(app);
+    else if (_mode == "--macros") buildMacros(app);
     else if (_mode == "--check-update") checkUpdate(app, _quiet);
     else if (_mode == "--crash-report") crashReport(app, _dialog);
     else if (!prefs::getInt("OnboardingDone", 0)) buildGuide(app, true);   // first run: the guide, then this window

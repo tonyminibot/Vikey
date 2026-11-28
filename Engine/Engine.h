@@ -194,6 +194,12 @@ void* vKeyInit();
 Uint32 getCharacterCode(const Uint32& data);
 
 /**
+ * The characters of the word being typed, as on screen (gõ tắt). Returns how many were written to out
+ * (0: no word, a space or punctuation already follows it, or it doesn't fit maxOut).
+ */
+int vTypingWordText(char32_t* out, const int& maxOut);
+
+/**
  * MAIN entry point for each key
  * event: mouse or keyboard event
  * state: additional state for event

@@ -10,6 +10,7 @@
 #import <Carbon/Carbon.h>
 #import <Foundation/Foundation.h>
 #import "Engine.h"
+#import "Macro.h"
 #import "VikeyCore.h"
 
 /// The switch sound (Tony picked "sparkle", 2026-10-29): two tiny notes, rising into Vietnamese, falling into English.
@@ -70,6 +71,8 @@ static void (^vEmojiHandler)(void) = nil;
 int vLanguage = 1, vSwitchKeyStatus = 0x7A000206, vCheckSpelling = 1, vUseModernOrthography = 1;
 int vRestoreIfWrongSpelling = 1, vFixRecommendBrowser = 1, vUseSmartSwitchKey = 1, vOtherLanguage = 1;
 int vAutoSwitchByTyping = 1, vPerformLayoutCompat = 0;
+// Gõ tắt (D68): the table is Engine/Macro.cpp, kept in macros.txt; these are the settings
+static int vUseMacro = 1, vMacroInEnglish = 1, vAutoCapsMacro = 0;
 
 NSNotificationName const VikeyLanguageDidChangeNotification = @"VikeyLanguageDidChange";
 
@@ -166,6 +169,7 @@ extern "C" {
     static bool _enNavValid = true, _enNavAfterDouble = false;
 
     static void ResetEnglishWord(bool valid) {
+        vikey::macro::englishReset();
         _enAfterDouble = false;
         _undoneCount = 0;
         StartEnglishWord(valid);
@@ -396,10 +400,31 @@ extern "C" {
         int hotkey = get(@"SwitchKeyStatus", 0);
         vSwitchKeyStatus = hotkey ? hotkey : 0x7A000206;  // default ⌥Z
         vEmojiHotkey = get(@"EmojiPicker", 0) ? get(@"EmojiHotkey", 0) : 0;
+        vUseMacro = get(@"UseMacro", 1);
+        vMacroInEnglish = get(@"UseMacroInEnglishMode", 1);
+        vAutoCapsMacro = get(@"vAutoCapsMacro", 0);
         VKUpdateLayoutCompat();
     }
 
+    /// The macro table file: ~/Library/Application Support/Vikey/macros.txt
+    static NSString* MacroFilePath() {
+        NSString* dir = [NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES).firstObject stringByAppendingPathComponent:@"Vikey"];
+        [[NSFileManager defaultManager] createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:nil error:nil];
+        return [dir stringByAppendingPathComponent:@"macros.txt"];
+    }
+    static void VKLoadMacros() {
+        NSString* path = MacroFilePath();
+        if ([[NSFileManager defaultManager] fileExistsAtPath:path]) { vikey::macro::load(path.UTF8String); return; }
+        // first run after OpenKey's settings were migrated: its macro table is in the "macroData" setting
+        NSData* old = [[NSUserDefaults standardUserDefaults] dataForKey:@"macroData"];
+        if (old.length >= 2) {
+            vikey::macro::loadOpenKeyBinary((const unsigned char*)old.bytes, old.length);
+            if (vikey::macro::count() > 0) vikey::macro::save(path.UTF8String);
+        }
+    }
+
     void VikeyInit() {
+        VKLoadMacros();
         queryFrontMostApp();   // so the excluded-app check is right from the first key
         VKLoadSettings();
         _tlApp = [[NSWorkspace sharedWorkspace] frontmostApplication].bundleIdentifier ?: ([[NSWorkspace sharedWorkspace] frontmostApplication].localizedName ?: @"");
@@ -690,6 +715,55 @@ extern "C" {
         
         //send new character
         SendNewCharString();
+    }
+
+    // ---- Gõ tắt (D68) ---------------------------------------------------------------------------
+    /// The abbreviation on screen (deleteCount characters) becomes the expansion, then the key that ended it.
+    static void MacroExpand(int deleteCount, const std::u32string& expansion, bool shift) {
+        if (shouldUseRecommendWorkaround(FRONT_APP)) { SendEmptyCharacter(); deleteCount++; }
+        for (int i = 0; i < deleteCount; i++) { if (shouldUseSelectionReplacement(FRONT_APP)) SendShiftAndLeftArrow(); else SendBackspace(); }
+        std::vector<UniChar> text;
+        for (char32_t c : expansion) {
+            if (c >= 0x10000) { char32_t v = c - 0x10000; text.push_back((UniChar)(0xD800 + (v >> 10))); text.push_back((UniChar)(0xDC00 + (v & 0x3FF))); }
+            else text.push_back((UniChar)c);
+        }
+        bool control = false;
+        Uint16 ch = keyCodeToCharacter(_keycode | (shift ? CAPS_MASK : 0));
+        if (ch != 0) text.push_back(ch); else control = true;   // Return, Tab: the real key goes after the text
+        if (!text.empty()) PostText(text.data(), (int)text.size());
+        if (control) SendKeyCode(_keycode, _flag);
+    }
+
+    /// At the key that ends a word: if the word on screen is an abbreviation, expand it. True when the key was handled.
+    static bool MacroTryExpand(bool english) {
+        if (!vUseMacro || (english && !vMacroInEnglish) || vikey::macro::count() == 0) return false;
+        bool shift = (_flag & kCGEventFlagMaskShift) != 0;
+        std::u32string word, expansion;
+        if (english) {
+            word = vikey::macro::englishWord();
+        } else {
+            char32_t w[40]; int n = vTypingWordText(w, 40);
+            word.assign(w, w + n);
+        }
+        if (word.empty() || !vikey::macro::lookup(word, vAutoCapsMacro != 0, expansion)) return false;
+        MacroExpand((int)word.size(), expansion, shift);
+        // the engine never saw the expansion: a new word starts, as after a click
+        if (english) ResetEnglishWord(true); else { vikey::macro::englishReset(); startNewSession(); RequestNewSession(); }
+        return true;
+    }
+
+    /// English mode: follows the word typed so a trigger key can expand it. True when the key was handled.
+    static bool MacroEnglishKey() {
+        if (!vUseMacro || !vMacroInEnglish) { vikey::macro::englishReset(); return false; }
+        if (OTHER_CONTROL_KEY) { vikey::macro::englishReset(); return false; }
+        bool shift = (_flag & kCGEventFlagMaskShift) != 0;
+        if (_keycode == KEY_DELETE) { vikey::macro::englishBackspace(); return false; }
+        if (vikey::macro::isTrigger(_keycode, shift)) {
+            if (MacroTryExpand(true)) return true;
+            vikey::macro::englishReset(); return false;
+        }
+        vikey::macro::englishType(_keycode, shift || ((_flag & kCGEventFlagMaskAlphaShift) && IsLetterKey(_keycode)));
+        return false;
     }
 
     static bool IsWhitespaceKey(const Uint16& key) {
@@ -1276,6 +1350,7 @@ extern "C" {
             if (vUseSmartSwitchKey && (_flag & (kCGEventFlagMaskCommand | kCGEventFlagMaskControl))) {
                 NudgeSiteCheck();
             }
+            if (MacroEnglishKey()) return NULL;
             if (vAutoSwitchByTyping && HandleEnglishKeyForAutoSwitch())
                 return NULL;
             return event;
@@ -1296,6 +1371,8 @@ extern "C" {
         
         //handle keyboard
         if (type == kCGEventKeyDown) {
+            //gõ tắt: the word on screen is an abbreviation and this key ends it
+            if (!(OTHER_CONTROL_KEY) && vikey::macro::isTrigger(_keycode, (_flag & kCGEventFlagMaskShift) != 0) && MacroTryExpand(false)) return NULL;
             //send event signal to Engine
             vAutoSwitchRequest = -1;
             vKeyHandleEvent(vKeyEvent::Keyboard,
@@ -1497,6 +1574,34 @@ static NSTimer* _watchdog = nil;
         CFRelease(down); CFRelease(up);
     }
 }
+
++ (NSString*)macroFilePath { return MacroFilePath(); }
++ (NSArray<NSDictionary<NSString*, NSString*>*>*)macros {
+    NSMutableArray* out = [NSMutableArray array];
+    for (auto& kv : vikey::macro::all())
+        [out addObject:@{ @"abbreviation": [NSString stringWithUTF8String:kv.first.c_str()] ?: @"", @"expansion": [NSString stringWithUTF8String:kv.second.c_str()] ?: @"" }];
+    return out;
+}
++ (BOOL)setMacro:(NSString*)abbreviation expansion:(NSString*)expansion {
+    if (!vikey::macro::set(abbreviation.UTF8String ?: "", expansion.UTF8String ?: "")) return NO;
+    vikey::macro::save(MacroFilePath().UTF8String);
+    return YES;
+}
++ (void)removeMacro:(NSString*)abbreviation {
+    if (vikey::macro::remove(abbreviation.UTF8String ?: "")) vikey::macro::save(MacroFilePath().UTF8String);
+}
++ (BOOL)validMacroAbbreviation:(NSString*)abbreviation { return vikey::macro::validAbbreviation(abbreviation.UTF8String ?: ""); }
++ (NSInteger)importMacrosFromPath:(NSString*)path {
+    NSData* data = [NSData dataWithContentsOfFile:path];
+    if (!data) return -1;
+    auto before = vikey::macro::all();
+    vikey::macro::parse(std::string((const char*)data.bytes, data.length));
+    auto imported = vikey::macro::all();
+    for (auto& kv : before) if (!vikey::macro::has(kv.first)) vikey::macro::set(kv.first, kv.second);   // added to the table, not replacing it
+    vikey::macro::save(MacroFilePath().UTF8String);
+    return (NSInteger)imported.size();
+}
++ (BOOL)exportMacrosToPath:(NSString*)path { return vikey::macro::save(path.UTF8String); }
 
 + (NSString*)typingLogPath { return TLLogPath(); }
 + (NSDictionary*)typingLogStats { return TLStatsSnapshot(); }

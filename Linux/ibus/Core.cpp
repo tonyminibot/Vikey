@@ -1,5 +1,6 @@
 #include "Core.h"
 #include "Prefs.h"
+#include "Macro.h"
 #include <vector>
 #include <algorithm>
 #include <cstdio>
@@ -18,6 +19,7 @@ static const int EMPTY_HOTKEY = 0xFE0000FE;
 #define OTHER_CONTROL_KEY ((_flag & F_CONTROL) || (_flag & F_ALT) || (_flag & F_WIN))
 static Output _out;
 static vKeyHookState* pData = nullptr;
+static int vUseMacro = 1, vMacroInEnglish = 1, vAutoCapsMacro = 0;   // gõ tắt (D68), Engine/Macro.cpp
 static unsigned _flag = 0, _lastFlag = 0;
 static bool _modifierChordUsed = false;   // the modifiers held went with a click or another key: no modifier-only hotkey until all are released
 static bool _hotkeyHeld = false;   // the switch hotkey's key is down (with or without its modifiers): IBus has no repeat flag, so presses before its release are auto-repeat; a click or focus_out clears it (a missed release)
@@ -40,7 +42,7 @@ static AutoFixUndo _autoFixUndo = {};
 static Uint32 _undoneKeys[MAX_BUFF]; static int _undoneCount = 0;
 static int vEmojiHotkey = 0;   // the emoji picker's hotkey (0 = off)
 static void StartEnglishWord(bool valid) { _enCount = 0; _enValid = valid; _enAfterShortcut = false; }
-static void ResetEnglishWord(bool valid) { _enAfterDouble = false; _undoneCount = 0; StartEnglishWord(valid); _enPrevN = 0; _enNavOffset = 0; vAutoSwitchForget(); }   // also the D51 round trip: after a click or a switch → must not bring the old word back
+static void ResetEnglishWord(bool valid) { macro::englishReset(); _enAfterDouble = false; _undoneCount = 0; StartEnglishWord(valid); _enPrevN = 0; _enNavOffset = 0; vAutoSwitchForget(); }   // also the D51 round trip: after a click or a switch → must not bring the old word back
 
 // ---- Typing log --------------------------------------------------------------------------------
 int vTypingLogKeys = 1, vTypingLogEnabled = 0;
@@ -157,6 +159,7 @@ void command(const std::string& line) {
         _tlWordLen = 0; clearTypingLog(); prefs::clearStats();
     }
 }
+static std::string macroPath() { return prefs::configDir() + "/macros.txt"; }
 void reloadSettings() {
     prefs::reload();
     int fileLang = prefs::getInt("InputMethod", 1) ? 1 : 0;
@@ -170,6 +173,8 @@ void reloadSettings() {
     vAutoSwitchByTyping = AutoSwitchPaused() ? 0 : prefs::getInt("AutoSwitchByTyping", 1);
     vTypingLogKeys = prefs::getInt("TypingLogKeys", 1);
     vTypingLogEnabled = prefs::getInt("TypingLogEnabled", 0);
+    vUseMacro = prefs::getInt("UseMacro", 1); vMacroInEnglish = prefs::getInt("UseMacroInEnglishMode", 1); vAutoCapsMacro = prefs::getInt("vAutoCapsMacro", 0);
+    macro::load(macroPath());   // the settings app edits the file and touches settings.json
     int hotkey = prefs::getInt("SwitchKeyStatus", 0);
     vSwitchKeyStatus = hotkey ? hotkey : 0x7A000206;   // default Alt+Z
     _hotkeyHeld = false;   // the old hotkey's release won't match the new one
@@ -218,6 +223,38 @@ void setLanguageByUser(int lang) { if (vLanguage == lang) return; PauseAutoSwitc
 void setLanguageQuiet(int lang) { _autoFixUndo.active = false; ResetEnglishWord(true); _autoPauseUntil = 0; vAutoSwitchByTyping = prefs::getInt("AutoSwitchByTyping", 1); vLanguage = lang ? 1 : 0; VKLanguageChanged(false); startNewSession(); }
 int language() { return vLanguage; }
 void setLanguageObserver(std::function<void(int)> f) { _observer = f; }
+
+// ---- Gõ tắt (D68) --------------------------------------------------------------------------------------
+/// The abbreviation on screen (deleteCount characters) becomes the expansion, then the key that ended it.
+static void MacroExpand(int deleteCount, const std::u32string& expansion) {
+    if (deleteCount > 0) _out.backspaces(deleteCount);
+    std::u32string text = expansion;
+    bool control = false;
+    Uint16 ch = keyCodeToCharacter(_keycode | ((_flag & F_SHIFT) ? CAPS_MASK : 0));
+    if (ch != 0) text += (char32_t)ch; else control = true;   // Enter, Tab: the real key goes after the text
+    if (!text.empty()) _out.text(text);
+    if (control) _out.controlKey(_keycode, (_flag & F_SHIFT) != 0);
+}
+/// At the key that ends a word: if the word on screen is an abbreviation, expand it. True when the key was handled.
+static bool MacroTryExpand(bool english) {
+    if (!vUseMacro || (english && !vMacroInEnglish) || macro::count() == 0) return false;
+    std::u32string word, expansion;
+    if (english) word = macro::englishWord();
+    else { char32_t w[40]; int n = vTypingWordText(w, 40); word.assign(w, w + n); }
+    if (word.empty() || !macro::lookup(word, vAutoCapsMacro != 0, expansion)) return false;
+    MacroExpand((int)word.size(), expansion);
+    if (english) ResetEnglishWord(true); else { macro::englishReset(); startNewSession(); vKeyHandleEvent(vKeyEvent::Mouse, vKeyEventState::MouseDown, 0); }   // the engine never saw the expansion: a new word starts, as after a click
+    return true;
+}
+/// English mode: follows the word typed so a trigger key can expand it. True when the key was handled.
+static bool MacroEnglishKey() {
+    if (!vUseMacro || !vMacroInEnglish || OTHER_CONTROL_KEY) { macro::englishReset(); return false; }
+    bool shift = _flag & F_SHIFT;
+    if (_keycode == KEY_DELETE) { macro::englishBackspace(); return false; }
+    if (macro::isTrigger(_keycode, shift)) { if (MacroTryExpand(true)) return true; macro::englishReset(); return false; }
+    macro::englishType(_keycode, shift || ((_flag & F_CAPS) && IsLetterKey(_keycode)));
+    return false;
+}
 
 // ---- Auto switch -------------------------------------------------------------------------------------
 static bool IsWhitespaceKey(Uint16 key) { return key == KEY_SPACE || key == KEY_RETURN || key == KEY_ENTER || key == KEY_TAB; }
@@ -353,7 +390,8 @@ bool keyDown(Uint16 key, bool shift, unsigned flags) {
     }
     _autoFixUndo.active = keepUndo;
     TLNoteKey(_keycode, _flag);
-    if (vLanguage == 0) return vAutoSwitchByTyping && HandleEnglishKeyForAutoSwitch();
+    if (vLanguage == 0) { if (MacroEnglishKey()) return true; return vAutoSwitchByTyping && HandleEnglishKeyForAutoSwitch(); }
+    if (!OTHER_CONTROL_KEY && macro::isTrigger(_keycode, _flag & F_SHIFT) && MacroTryExpand(false)) return true;
     vAutoSwitchRequest = -1;
     vKeyHandleEvent(vKeyEvent::Keyboard, vKeyEventState::KeyDown, _keycode, (_flag & F_SHIFT) ? 1 : ((_flag & F_CAPS) ? 2 : 0), OTHER_CONTROL_KEY);
     if (vTypingLogEnabled && getenv("VIKEY_DEBUG")) TLWrite("\"e\":\"key\",\"k\":" + std::to_string(_keycode) + ",\"flag\":" + std::to_string(_flag) + ",\"code\":" + std::to_string(pData->code) + ",\"bs\":" + std::to_string(pData->backspaceCount) + ",\"nc\":" + std::to_string(pData->newCharCount) + ",\"req\":" + std::to_string(vAutoSwitchRequest));

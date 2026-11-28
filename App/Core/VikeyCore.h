@@ -57,6 +57,16 @@ extern NSNotificationName const VikeyLanguageDidChangeNotification;
 /// Types text into the focused app.
 + (void)insertText:(NSString *)text;
 
+/// Gõ tắt: the abbreviation table (kept in macros.txt in Application Support/Vikey).
++ (NSString *)macroFilePath;
++ (NSArray<NSDictionary<NSString *, NSString *> *> *)macros;   // sorted: @"abbreviation", @"expansion"
++ (BOOL)setMacro:(NSString *)abbreviation expansion:(NSString *)expansion;   // NO when either is invalid
++ (void)removeMacro:(NSString *)abbreviation;
++ (BOOL)validMacroAbbreviation:(NSString *)abbreviation;
+/// Adds the lines of a UniKey/OpenKey macro file to the table (the file's entry wins). Returns how many it holds, -1 if unreadable.
++ (NSInteger)importMacrosFromPath:(NSString *)path;
++ (BOOL)exportMacrosToPath:(NSString *)path;
+
 /// Typing log.
 + (NSString *)typingLogPath;
 + (NSDictionary<NSString *, NSDictionary<NSString *, NSNumber *> *> *)typingLogStats;
